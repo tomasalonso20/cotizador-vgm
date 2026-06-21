@@ -35,7 +35,7 @@ if uploaded_excel and uploaded_image and api_key:
     imagen_pedido = Image.open(uploaded_image)
     
     # Crear el modelo de IA con capacidades de visión
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     # Prompt maestro con tus reglas de negocio corporativas
     prompt = f"""
