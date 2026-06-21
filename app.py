@@ -2,6 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 import json
+from PIL import Image  # <-- Arreglo principal: Librería para convertir el archivo en imagen real
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
@@ -43,7 +44,10 @@ if archivo_excel and imagen_pedido and api_key:
         col_desc = next((c for c in df.columns if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower()), df.columns[1] if len(df.columns) > 1 else df.columns[0])
         col_precio = next((c for c in df.columns if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), df.columns[-1])
 
-        # 3. Pedirle a Gemini únicamente que extraiga el texto de la imagen (Ahorra 99% de tokens)
+        # 3. CONVERSIÓN CRÍTICA: Abrir el archivo de Streamlit como una imagen válida para la IA
+        imagen_lista = Image.open(imagen_pedido)
+
+        # 4. Pedirle a Gemini únicamente que extraiga el texto de la imagen (Ahorra 99% de tokens)
         prompt_extraccion = """
         Analiza detalladamente esta imagen de pedido. Extrae cada producto solicitado y su cantidad.
         Devuelve el resultado ÚNICAMENTE en un formato JSON puro, sin textos introductorios, usando exactamente esta estructura:
@@ -56,14 +60,14 @@ if archivo_excel and imagen_pedido and api_key:
         No uses marcas de bloque markdown tipo ```json ni nada extra, solo entrega el texto del JSON directo.
         """
         
-        response = model.generate_content([prompt_extraccion, imagen_pedido])
+        response = model.generate_content([prompt_extraccion, imagen_lista])
         texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
         
         # Cargar los productos que Gemini descubrió en la foto
         datos_pedido = json.loads(texto_limpio)
         lista_productos = datos_pedido.get("productos", [])
         
-        # 4. Motor de búsqueda interno en Python (Busca en los 2.000 productos al instante)
+        # 5. Motor de búsqueda interno en Python (Busca en los 2.000 productos al instante)
         cotizacion_final = []
         
         for item in lista_productos:
@@ -109,7 +113,7 @@ if archivo_excel and imagen_pedido and api_key:
                     "Total": 0.0
                 })
         
-        # 5. Dibujar los resultados finales en pantalla
+        # 6. Dibujar los resultados finales en pantalla
         if cotizacion_final:
             df_resultado = pd.DataFrame(cotizacion_final)
             st.success("¡Cotización generada exitosamente con tu catálogo completo!")
