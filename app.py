@@ -159,17 +159,18 @@ if archivo_excel and imagen_pedido and api_key:
             st.info("🔄 Fase 3: Resolviendo ambigüedades con el cerebro analítico de Gemini...")
             
             prompt_resolucion = f"""
-            Actúas como un experto en repuestos y herramientas automotrices para VGM SpA. 
+            Actúas como un expertisimo en repuestos y herramientas automotrices para VGM SpA. 
             Cruza los productos solicitados por el cliente con las mejores opciones de candidatos encontradas en nuestro catálogo.
             
             Reglas de decisión cruciales:
             1. Sé inteligente con sinónimos (ej: "pistola de impacto" es equivalente a "llave de impacto").
             2. Si los candidatos NO tienen ninguna relación lógica con el producto real (ej: el cliente pide una linterna y los candidatos son juegos de puntas o compresores sólo porque comparten la palabra 'imantada'), debes marcarlo como NO ENCONTRADO. No inventes cruces erróneos.
+            3. Si marcas un producto como NO ENCONTRADO, establece el campo 'precio_elegido' obligatoriamente en 0.0.
             
             Analiza el siguiente diccionario de búsquedas y candidatos:
             {json.dumps(candidates_rag, ensure_ascii=False, indent=2)}
             
-            Devuelve ÚNICAMENTE un JSON estructurado de la siguiente forma, sin bloques markdown ni texto adicional:
+            Devuelve ÚNICAMENTE un JSON structured de la siguiente forma, sin bloques markdown ni texto adicional:
             {{
                 "resultados": [
                     {{
@@ -192,8 +193,27 @@ if archivo_excel and imagen_pedido and api_key:
             cotizacion_final = []
             for res in resultados_lista:
                 origen = res.get("busqueda_original", "")
+                
+                # --- ESCUDO PROTECTOR DE TIPOS DE DATOS ---
+                # Validar cantidad segura
                 cant = cantidades_dict.get(origen, 1)
+                if cant is None:
+                    cant = 1
+                try:
+                    cant = int(cant)
+                except:
+                    cant = 1
+                
+                # Validar precio seguro
                 px = res.get("precio_elegido", 0.0)
+                if px is None:
+                    px = 0.0
+                try:
+                    px = float(px)
+                except:
+                    px = 0.0
+                # ------------------------------------------
+
                 desc = res.get("descripcion_elegida", "")
                 
                 # Agregar alerta visual si Gemini consideró que era un match aproximado/sinónimo
