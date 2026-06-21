@@ -93,7 +93,7 @@ if archivo_excel and imagen_pedido and api_key:
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            st.info("🔄 Fase 1: Leyendo imagen del pedido con Visión Artificial...")
+            st.info("🔄 Fase 1: Leyendo imagen y expandiendo términos técnicos de búsqueda...")
             
             df = pd.read_excel(archivo_excel, header=1)
             df.columns = [str(c).strip() for c in df.columns]
@@ -106,11 +106,16 @@ if archivo_excel and imagen_pedido and api_key:
             
             prompt_extraccion = """
             Analiza detalladamente esta imagen de pedido. Extrae cada producto solicitado y su cantidad.
+            Además, para cada producto genera una lista de 3 a 4 sinónimos o términos técnicos comerciales en español que se usen comúnmente en los catálogos de herramientas (ejemplo: si piden 'Pistola neumática', incluye 'llave impacto', 'neumatica'; si piden 'Linterna imantada', incluye 'lampara trabajo', 'iman', 'led').
+            
             Devuelve el resultado ÚNICAMENTE en un formato JSON puro, sin textos introductorios, usando exactamente esta estructura:
             {
                 "productos": [
-                    {"busqueda": "nombre o marca clave del producto 1", "cantidad": 2},
-                    {"busqueda": "nombre o marca clave del producto 2", "cantidad": 5}
+                    {
+                        "busqueda": "Nombre original en el pedido", 
+                        "cantidad": 2,
+                        "sinonimos": ["termino1", "termino2", "termino3"]
+                    }
                 ]
             }
             No uses marcas de bloque markdown tipo ```json ni nada extra, solo entrega el texto del JSON directo.
@@ -122,30 +127,53 @@ if archivo_excel and imagen_pedido and api_key:
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
             
-            st.info("🔄 Fase 2: Pre-filtrando candidatos semánticos del catálogo...")
+            st.info("🔄 Fase 2: Ejecutando pre-filtrado semántico expandido...")
             
-            # Mapear cantidades indexadas por la búsqueda original
-            cantidades_dict = {item.get("busqueda", ""): item.get("cantidad", 1) for item in lista_productos}
+            # Mapear cantidades seguras indexadas por el nombre de búsqueda original
+            cantidades_dict = {}
+            for item in lista_productos:
+                b_orig = item.get("busqueda", "")
+                cant_val = item.get("cantidad", 1)
+                try:
+                    cantidades_dict[b_orig] = int(cant_val) if cant_val is not None else 1
+                except:
+                    cantidades_dict[b_orig] = 1
+
             candidates_rag = {}
-            
             for item in lista_productos:
                 termino = item.get("busqueda", "")
                 if not termino:
                     continue
                 
-                termino_norm = normalizar_texto(termino)
-                termino_sin_plural = limpiar_plurales(termino_norm)
-                palabras_clave = [p for p in termino_sin_plural.split() if len(p) > 2 and p not in STOP_WORDS]
+                # Reunir término original y sus sinónimos generados por la IA
+                sinonimos_ia = item.get("sinonimos", [])
+                terminos_totales = [termino] + sinonimos_ia
+                
+                palabras_clave = set()
+                for t in terminos_totales:
+                    t_norm = normalizar_texto(t)
+                    t_stem = limpiar_plurales(t_norm)
+                    for p in t_stem.split():
+                        if len(p) > 2 and p not in STOP_WORDS:
+                            palabras_clave.add(p)
                 
                 if not palabras_clave:
-                    palabras_clave = [termino_norm]
+                    palabras_clave = {normalizar_texto(termino)}
                 
                 def score_prefiltrado(row):
                     txt_inv = str(row['__desc_clean']) + " " + str(row['__cod_clean'])
-                    return sum(2 if p in txt_inv else 0 for p in palabras_clave)
+                    score = 0
+                    for p in palabras_clave:
+                        if p in txt_inv:
+                            score += 2
+                            # Bonus de coincidencia crítica industrial
+                            if p in ['impacto', 'llave', 'lampara', 'iman', 'correa', 'elastica']:
+                                score += 2
+                    return score
                 
                 df['__tmp_score'] = df.apply(score_prefiltrado, axis=1)
-                df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(10) # Subimos a 10 candidatos para no dejar fuera los códigos correctos
+                # Subimos a los mejores 15 candidatos para garantizar que entren códigos exactos
+                df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(15)
                 
                 lista_candidatos = []
                 for _, r in df_filtrado.iterrows():
@@ -159,28 +187,16 @@ if archivo_excel and imagen_pedido and api_key:
             st.info("🔄 Fase 3: Resolviendo ambigüedades con el cerebro analítico de Gemini...")
             
             prompt_resolucion = f"""
-            Actúas como un expertísimo en repuestos y herramientas industriales para VGM SpA. 
-            Cruza los productos solicitados por el cliente con las mejores opciones de candidatos encontradas en nuestro catálogo Excel.
+            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
+            Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
-            ⚠️ REGLAS INQUEBRANTABLES DE NEGOCIO (Si fallas en esto, la cotización queda mal hecha):
+            ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN:
+            1. PISTOLAS NEUMÁTICAS: Si el cliente pide una "Pistola Neumática" o "Pistola de impacto" de aire estándar para taller, el código exacto de nuestro catálogo YATO es 'YT09511' (Llave Impacto std. 1/2). NO elijas pistolas para inflar neumáticos (YT2370) ni de engrasar (PT206) a menos que se pida explícitamente inflar o engrasar.
+            2. LINTERNAS IMANTADAS: Si piden una "Linterna imantada", el modelo estándar que corresponde a nuestras promociones es el 'YT08518'. Si lo encuentras en los candidatos, elígelo. No lo confundas con lámparas UV para fugas.
+            3. HERRAMIENTAS INALÁMBRICAS: Asegúrate de que si piden 'inalámbrica' o de 'batería', el código elegido corresponda a una herramienta eléctrica a batería (ej: serie de códigos que empiece con YT8277 o similar) y no a una de aire comprimido.
+            4. FILTRO ESTRICTO NO ENCONTRADO: Si ningún candidato coincide lógicamente (ej: piden un kit de calado de correas elásticas y solo hay herramientas básicas sin relación), marca obligatoriamente 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO' y 'precio_elegido': 0.0.
             
-            1. REGLA CRÍTICA PARA PISTOLAS NEUMÁTICAS / DE IMPACTO:
-               - "Pistola de impacto", "Pistola neumática" o "Llave de impacto" son términos equivalentes en el taller.
-               - Si la búsqueda original es genérica (ej: "Pistola Neumática" o "Pistola de impacto") sin especificar torque o tamaño especial, DEBES ELEGIR EL CÓDIGO 'YT09511' (Llave de impacto std 1/2).
-               - PROHIBIDO: No confundas esto con pistolas para inflar neumáticos (como el código YT2370). Jamás asignes una pistola de inflar si el cliente pide una pistola neumática general de taller.
-            
-            2. REGLA CRÍTICA PARA LINTERNAS IMANTADAS:
-               - Si el cliente solicita una "linterna imantada" o "linterna", el modelo exacto que corresponde a la imagen de nuestro correo de referencia es la 'YT08518'. 
-               - Si el código 'YT08518' aparece listado entre tus candidatos, DEBES ELEGIRLO OBLIGATORIAMENTE.
-               - PROHIBIDO: No elijas lámparas UV para detección de fugas (como YT08500) a menos que el cliente use explícitamente el término "UV" o "fugas".
-            
-            3. FILTRO DE COINCIDENCIA LOGICA ESTRICTA:
-               - Si los candidatos NO tienen ninguna relación real con el producto pedido (ej: el cliente pide un "Kit montaje" y el catálogo solo arroja herramientas sueltas o nada que ver), debes marcarlo como NO ENCONTRADO. Pon obligatoriamente 'codigo_elegido': 'MANUAL' y 'descripcion_elegida': '❌ NO ENCONTRADO'. No inventes cruces erróneos.
-            
-            4. PRECIOS PARA ITEMS MANUALES:
-               - Si decides dejar un producto como 'MANUAL', el campo 'precio_elegido' DEBE SER obligatoriamente 0.0.
-            
-            Analiza el siguiente diccionario de búsquedas y candidatos:
+            Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             {json.dumps(candidates_rag, ensure_ascii=False, indent=2)}
             
             Devuelve ÚNICAMENTE un JSON estructurado de la siguiente forma, sin bloques markdown ni texto adicional:
@@ -207,31 +223,25 @@ if archivo_excel and imagen_pedido and api_key:
             for res in resultados_lista:
                 origen = res.get("busqueda_original", "")
                 
-                # --- ESCUDO PROTECTOR DE TIPOS DE DATOS ---
+                # --- ESCUDO TOTAL ANTICRASH CONTRA NONETYPES ---
                 cant = cantidades_dict.get(origen, 1)
-                if cant is None:
-                    cant = 1
-                try:
-                    cant = int(cant)
-                except:
-                    cant = 1
+                cant = int(cant) if cant is not None else 1
                 
                 px = res.get("precio_elegido", 0.0)
-                if px is None:
-                    px = 0.0
-                try:
-                    px = float(px)
-                except:
-                    px = 0.0
-                # ------------------------------------------
+                px = float(px) if px is not None else 0.0
+                # -----------------------------------------------
 
-                desc = res.get("descripcion_elegida", "")
+                desc = res.get("descripcion_elegida", "❌ NO ENCONTRADO")
+                cod = res.get("codigo_elegido", "MANUAL")
                 
-                if not res.get("coincidencia_exacta", True) and "❌" not in desc:
-                    desc = f"⚠️ (Match aproximado) {desc}"
+                if cod == "MANUAL" or "❌" in desc:
+                    desc = "❌ NO ENCONTRADO: Modificar manualmente"
+                    px = 0.0
+                elif not res.get("coincidencia_exacta", True):
+                    desc = f"⚠️ (Match sugerido) {desc}"
                     
                 cotizacion_final.append({
-                    "Código": res.get("codigo_elegido", "MANUAL"),
+                    "Código": cod,
                     "Descripción Catálogo": desc,
                     "Cantidad": cant,
                     "Precio Unitario": px,
@@ -240,7 +250,7 @@ if archivo_excel and imagen_pedido and api_key:
                 
             if cotizacion_final:
                 df_resultado = pd.DataFrame(cotizacion_final)
-                st.success("¡Cotización inteligente procesada con éxito!")
+                st.success("¡Cotización inteligente procesada con éxito con motor RAG expandido!")
                 st.dataframe(df_resultado, use_container_width=True)
                 
                 total_neto = df_resultado["Total"].sum()
