@@ -106,7 +106,12 @@ if archivo_excel and imagen_pedido and api_key:
             
             prompt_extraccion = """
             Analiza detalladamente esta imagen de pedido. Extrae cada producto solicitado y su cantidad.
-            Además, para cada producto genera una lista de 3 a 4 sinónimos o términos técnicos comerciales en español que se usen comúnmente en los catálogos de herramientas (ejemplo: si piden 'Pistola neumática', incluye 'llave impacto', 'neumatica'; si piden 'Linterna imantada', incluye 'lampara trabajo', 'iman', 'led').
+            Además, para cada producto genera una lista de 4 a 6 sinónimos o términos técnicos comerciales en español que se usen comúnmente en los catálogos de herramientas industriales.
+            
+            CRÍTICO PARA LA EXPANSIÓN:
+            - Si detectas 'Pistola neumática' o similar, incluye obligatoriamente: 'llave impacto', 'neumatica', 'aire', 'cuadrante', '550', 'std'.
+            - Si detectas 'Linterna imantada' o similar, incluye obligatoriamente: 'lampara trabajo', 'iman', 'led', 'funcional', 'cob'.
+            - Si detectas 'Correas multinervadas' o 'elasticas', incluye obligatoriamente: 'extractor', 'instalador', 'montaje', 'desmontaje', 'correa', 'puesta punto'.
             
             Devuelve el resultado ÚNICAMENTE en un formato JSON puro, sin textos introductorios, usando exactamente esta estructura:
             {
@@ -114,7 +119,7 @@ if archivo_excel and imagen_pedido and api_key:
                     {
                         "busqueda": "Nombre original en el pedido", 
                         "cantidad": 2,
-                        "sinonimos": ["termino1", "termino2", "termino3"]
+                        "sinonimos": ["termino1", "termino2", "termino3", "termino4"]
                     }
                 ]
             }
@@ -127,9 +132,8 @@ if archivo_excel and imagen_pedido and api_key:
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
             
-            st.info("🔄 Fase 2: Ejecutando pre-filtrado semántico expandido...")
+            st.info("🔄 Fase 2: Ejecutando pre-filtrado semántico expandido de amplio espectro...")
             
-            # Mapear cantidades seguras indexadas por el nombre de búsqueda original
             cantidades_dict = {}
             for item in lista_productos:
                 b_orig = item.get("busqueda", "")
@@ -145,7 +149,6 @@ if archivo_excel and imagen_pedido and api_key:
                 if not termino:
                     continue
                 
-                # Reunir término original y sus sinónimos generados por la IA
                 sinonimos_ia = item.get("sinonimos", [])
                 terminos_totales = [termino] + sinonimos_ia
                 
@@ -161,19 +164,19 @@ if archivo_excel and imagen_pedido and api_key:
                     palabras_clave = {normalizar_texto(termino)}
                 
                 def score_prefiltrado(row):
-                    txt_inv = str(row['__desc_clean']) + " " + str(row['__cod_clean'])
+                    txt_inv = " " + str(row['__desc_clean']) + " " + str(row['__cod_clean']) + " "
                     score = 0
                     for p in palabras_clave:
                         if p in txt_inv:
-                            score += 2
-                            # Bonus de coincidencia crítica industrial
-                            if p in ['impacto', 'llave', 'lampara', 'iman', 'correa', 'elastica']:
-                                score += 2
+                            score += 5  # Incrementamos peso base de acierto
+                            if f" {p} " in txt_inv:
+                                score += 3  # Bonus por palabra exacta delimitada
                     return score
                 
                 df['__tmp_score'] = df.apply(score_prefiltrado, axis=1)
-                # Subimos a los mejores 15 candidatos para garantizar que entren códigos exactos
-                df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(15)
+                
+                # AMPLIACIÓN CRÍTICA: Subimos a 40 candidatos para asegurar que las llaves de impacto no queden fuera
+                df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(40)
                 
                 lista_candidatos = []
                 for _, r in df_filtrado.iterrows():
@@ -184,17 +187,17 @@ if archivo_excel and imagen_pedido and api_key:
                     })
                 candidates_rag[termino] = lista_candidatos
 
-            st.info("🔄 Fase 3: Resolviendo ambigüedades con el cerebro analítico de Gemini...")
+            st.info("🔄 Fase 3: Resolviendo ambigüedades con homologación experta de catálogo...")
             
             prompt_resolucion = f"""
             Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN:
-            1. PISTOLAS NEUMÁTICAS: Si el cliente pide una "Pistola Neumática" o "Pistola de impacto" de aire estándar para taller, el código exacto de nuestro catálogo YATO es 'YT09511' (Llave Impacto std. 1/2). NO elijas pistolas para inflar neumáticos (YT2370) ni de engrasar (PT206) a menos que se pida explícitamente inflar o engrasar.
-            2. LINTERNAS IMANTADAS: Si piden una "Linterna imantada", el modelo estándar que corresponde a nuestras promociones es el 'YT08518'. Si lo encuentras en los candidatos, elígelo. No lo confundas con lámparas UV para fugas.
-            3. HERRAMIENTAS INALÁMBRICAS: Asegúrate de que si piden 'inalámbrica' o de 'batería', el código elegido corresponda a una herramienta eléctrica a batería (ej: serie de códigos que empiece con YT8277 o similar) y no a una de aire comprimido.
-            4. FILTRO ESTRICTO NO ENCONTRADO: Si ningún candidato coincide lógicamente (ej: piden un kit de calado de correas elásticas y solo hay herramientas básicas sin relación), marca obligatoriamente 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO' y 'precio_elegido': 0.0.
+            1. PISTOLAS NEUMÁTICAS: Si el cliente pide una "Pistola Neumática" o "Pistola de impacto" de aire estándar, comercialmente esto corresponde a las Llaves de Impacto de aire. El código estándar de nuestro catálogo es 'YT09511' (Llave Impacto std. 1/2). Si viene en los candidatos, selecciónalo de forma prioritaria. NO elijas pistolas para inflar neumáticos (YT2370) ni de engrasar (PT206) a menos que se pida textualmente inflar o engrasar.
+            2. LINTERNAS LARGAS / IMANTADAS: El código predilecto para promociones de linternas de trabajo profesionales con imán es el 'YT08518'. Si aparece en tus candidatos, elígelo.
+            3. HERRAMIENTAS DE CORREAS ELÁSTICAS: Si el cliente pide un kit para montaje/desmontaje de correas elásticas o multinervadas, revisa minuciosamente si hay algún extractor o llave especializada para correas. Si el catálogo tiene herramientas genéricas que no corresponden a un kit de calado o montaje de correas, pon 'MANUAL'.
+            4. FILTRO ESTRICTO NO ENCONTRADO: Si ningún candidato coincide lógicamente con lo pedido, marca obligatoriamente 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
             
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             {json.dumps(candidates_rag, ensure_ascii=False, indent=2)}
@@ -223,19 +226,17 @@ if archivo_excel and imagen_pedido and api_key:
             for res in resultados_lista:
                 origen = res.get("busqueda_original", "")
                 
-                # --- ESCUDO TOTAL ANTICRASH CONTRA NONETYPES ---
                 cant = cantidades_dict.get(origen, 1)
                 cant = int(cant) if cant is not None else 1
                 
                 px = res.get("precio_elegido", 0.0)
                 px = float(px) if px is not None else 0.0
-                # -----------------------------------------------
 
                 desc = res.get("descripcion_elegida", "❌ NO ENCONTRADO")
                 cod = res.get("codigo_elegido", "MANUAL")
                 
                 if cod == "MANUAL" or "❌" in desc:
-                    desc = "❌ NO ENCONTRADO: Modificar manualmente"
+                    desc = f"❌ NO ENCONTRADO: (Falta en catálogo o requiere código manual para '{origen}')"
                     px = 0.0
                 elif not res.get("coincidencia_exacta", True):
                     desc = f"⚠️ (Match sugerido) {desc}"
@@ -250,7 +251,7 @@ if archivo_excel and imagen_pedido and api_key:
                 
             if cotizacion_final:
                 df_resultado = pd.DataFrame(cotizacion_final)
-                st.success("¡Cotización inteligente procesada con éxito con motor RAG expandido!")
+                st.success("¡Cotización inteligente procesada con éxito con motor RAG expandido de amplio espectro!")
                 st.dataframe(df_resultado, use_container_width=True)
                 
                 total_neto = df_resultado["Total"].sum()
