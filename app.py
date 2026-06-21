@@ -65,8 +65,7 @@ if uploaded_excel and uploaded_image and api_key:
     try:
         # Ejecutar la Inteligencia Artificial
         response = model.generate_content([prompt, imagen_pedido])
-        texto_limpio = response.text.strip().replace("
-```json", "").replace("```", "")
+        texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
         items_cotizados = json.loads(texto_limpio)
         
         # Cálculos de dinero
