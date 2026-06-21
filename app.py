@@ -14,9 +14,7 @@ def normalizar_texto(texto):
     if pd.isna(texto):
         return ""
     texto = str(texto).lower().strip()
-    # Eliminar acentos de forma nativa
     texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-    # Reemplazar signos comunes por espacios limpios
     for char in ['( ', ' )', '(', ')', '-', ',', '.', '/', '"', "'", '+']:
         texto = texto.replace(char, ' ')
     return texto
@@ -29,10 +27,8 @@ def limpiar_precio(valor):
     if not val_str:
         return 0.0
     try:
-        # Si pandas ya lo interpretó como float puro
         return float(val_str)
     except ValueError:
-        # Si viene con puntos de miles chilenos (ej: 39.990)
         if "," in val_str:
             val_str = val_str.replace(".", "").replace(",", ".")
         else:
@@ -48,7 +44,6 @@ with st.sidebar:
     api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
     st.markdown("---")
     st.subheader("📊 Verificación de Columnas")
-    st.caption("Sube tu archivo Excel en la derecha para activar el panel de control de columnas.")
 
 # Columnas de la interfaz principal
 col1, col2 = st.columns(2)
@@ -61,47 +56,43 @@ with col2:
     st.subheader("2. Sube el pantallazo del pedido (WhatsApp / Correo)")
     imagen_pedido = st.file_uploader("Selecciona la imagen del pedido", type=["png", "jpg", "jpeg"])
 
-# Leer el Excel inmediatamente para habilitar los selectores visuales en el sidebar
+# LEER EXCEL: Aquí es donde aplicamos el truco 'header=1' para saltarnos los logos naranjos
 if archivo_excel:
     try:
-        # Inspección rápida de las primeras filas
-        df_preview = pd.read_excel(archivo_excel, nrows=5)
+        # Le decimos a Python que los títulos reales están en la fila 2 (índice 1)
+        df_preview = pd.read_excel(archivo_excel, header=1, nrows=5)
         columnas_disponibles = [str(c).strip() for c in df_preview.columns]
         
-        # Inteligencia de detección por aproximación de nombres
+        # Intentar pre-seleccionar inteligentemente las columnas reales
         idx_cod = next((i for i, c in enumerate(columnas_disponibles) if 'cod' in c.lower() or 'id' in c.lower()), 0)
-        idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 2 if len(columnas_disponibles) > 2 else 1)
+        idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 1)
         idx_precio = next((i for i, c in enumerate(columnas_disponibles) if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), len(columnas_disponibles) - 1)
         
-        # Inyectar controles dinámicos en la barra lateral
         with st.sidebar:
-            st.write("Asegúrate de que coincidan con los títulos de tu planilla:")
+            st.write("Confirma que los títulos correspondan a tu Excel:")
             col_codigo = st.selectbox("Columna de Código:", columnas_disponibles, index=idx_cod)
             col_desc = st.selectbox("Columna de Descripción:", columnas_disponibles, index=idx_desc)
             col_precio = st.selectbox("Columna de Precio Neto:", columnas_disponibles, index=idx_precio)
-            st.success("✅ Mapeo de columnas activo")
+            st.success("✅ Títulos de columnas cargados con éxito")
     except Exception as e:
         st.sidebar.error(f"Error al analizar la estructura del Excel: {e}")
 
-# Ejecución del motor inteligente al tener todos los datos listos
+# Ejecución del motor inteligente
 if archivo_excel and imagen_pedido and api_key:
-    # Agregar botón para evitar ejecuciones accidentales al cargar archivos
     if st.button("🔥 Generar Cotización Automática"):
         try:
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            st.info("🔄 Procesando... Tu catálogo se está cargando a velocidad de memoria local...")
+            st.info("🔄 Buscando coincidencias exactas en tu catálogo...")
             
-            # Cargar dataframe completo
-            df = pd.read_excel(archivo_excel)
+            # Cargar dataframe completo ignorando la fila de logos
+            df = pd.read_excel(archivo_excel, header=1)
             df.columns = [str(c).strip() for c in df.columns]
             
-            # Indexar y pre-calcular textos limpios en el catálogo para optimizar búsquedas masivas
             df['__desc_clean'] = df[col_desc].apply(normalizar_texto)
             df['__cod_clean'] = df[col_codigo].apply(normalizar_texto)
             
-            # Convertir imagen a formato PIL
             imagen_lista = Image.open(imagen_pedido)
             
             prompt_extraccion = """
@@ -124,7 +115,6 @@ if archivo_excel and imagen_pedido and api_key:
             
             cotizacion_final = []
             
-            # Recorrer cada producto detectado por la IA
             for item in lista_productos:
                 termino_busqueda = item.get("busqueda", "")
                 cantidad = item.get("cantidad", 1)
@@ -132,24 +122,22 @@ if archivo_excel and imagen_pedido and api_key:
                 if not termino_busqueda:
                     continue
                 
-                # Normalizar la búsqueda del pedido
                 termino_norm = normalizar_texto(termino_busqueda)
-                palabras_busqueda = [p for p in termino_norm.split() if len(p) > 1]
+                palabras_busqueda = [p for p in termino_norm.split() if len(p) > 2] # Ignorar palabras cortas como 'de', 'el'
                 
                 if not palabras_busqueda:
                     palabras_busqueda = [termino_norm]
                 
-                # Aplicar el algoritmo de puntuación flexible por fila
+                # Algoritmo de penalización: Exigimos que al menos coincida el 60% de las palabras del pedido
                 def calcular_coincidencias(row):
                     texto_inventario = str(row['__desc_clean']) + " " + str(row['__cod_clean'])
-                    return sum(1 for p in palabras_busqueda if p in texto_inventario)
+                    coincidencias = sum(1 for p in palabras_busqueda if p in texto_inventario)
+                    return coincidencias if coincidencias >= (len(palabras_busqueda) * 0.6) else 0
                 
                 df['__score'] = df.apply(calcular_coincidencias, axis=1)
                 max_score = df['__score'].max()
                 
-                # Si encontramos al menos una coincidencia parcial de palabras clave
                 if max_score > 0:
-                    # Extraer la fila con mayor puntuación
                     mejor_coincidencia = df[df['__score'] == max_score].iloc[0]
                     precio_final = limpiar_precio(mejor_coincidencia[col_precio])
                     
@@ -161,26 +149,26 @@ if archivo_excel and imagen_pedido and api_key:
                         "Total": precio_final * cantidad
                     })
                 else:
+                    # Si no es un match seguro, te avisa en pantalla en vez de poner cualquier cosa
                     cotizacion_final.append({
-                        "Código": "N/A",
-                        "Descripción Catálogo": f"⚠️ REVISAR: No se halló en Excel como '{termino_busqueda}'",
+                        "Código": "MANUAL",
+                        "Descripción Catálogo": f"🔍 REVISAR: No se halló nada parecido a '{termino_busqueda}'",
                         "Cantidad": cantidad,
                         "Precio Unitario": 0.0,
                         "Total": 0.0
                     })
             
-            # Renderizar los resultados consolidados en la pantalla
             if cotizacion_final:
                 df_resultado = pd.DataFrame(cotizacion_final)
-                st.success("¡Cotización cruzada de forma inteligente con tu inventario!")
+                st.success("¡Cotización procesada!")
                 st.dataframe(df_resultado, use_container_width=True)
                 
                 total_neto = df_resultado["Total"].sum()
                 st.metric(label="Total Neto Cotizado (CLP)", value=f"${total_neto:,.0f}")
             else:
-                st.warning("No se procesaron productos interpretables desde la imagen.")
+                st.warning("No se procesaron productos interpretables.")
                 
         except Exception as e:
-            st.error(f"Error durante el cruce inteligente: {e}")
+            st.error(f"Error durante el proceso: {e}")
 else:
-    st.info("Por favor, introduce tu Gemini API Key a la izquierda y sube tus dos archivos para comenzar.")
+    st.info("Introduce tu Gemini API Key a la izquierda y sube tus dos archivos para comenzar.")
