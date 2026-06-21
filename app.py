@@ -19,6 +19,17 @@ def normalizar_texto(texto):
         texto = texto.replace(char, ' ')
     return texto
 
+# Función inteligente para remover el plural en español ('s') y mejorar búsquedas
+def limpiar_plurales(texto):
+    palabras = texto.split()
+    limpias = []
+    for p in palabras:
+        if len(p) > 3 and p.endswith('s'):
+            limpias.append(p[:-1])  # Quita la 's' al final
+        else:
+            limpias.append(p)
+    return " ".join(limpias)
+
 # Función para procesar y limpiar precios chilenos de forma segura
 def limpiar_precio(valor):
     if pd.isna(valor):
@@ -56,14 +67,12 @@ with col2:
     st.subheader("2. Sube el pantallazo del pedido (WhatsApp / Correo)")
     imagen_pedido = st.file_uploader("Selecciona la imagen del pedido", type=["png", "jpg", "jpeg"])
 
-# LEER EXCEL: Aquí es donde aplicamos el truco 'header=1' para saltarnos los logos naranjos
+# LEER EXCEL: Ignorando la fila de logos superiores
 if archivo_excel:
     try:
-        # Le decimos a Python que los títulos reales están en la fila 2 (índice 1)
         df_preview = pd.read_excel(archivo_excel, header=1, nrows=5)
         columnas_disponibles = [str(c).strip() for c in df_preview.columns]
         
-        # Intentar pre-seleccionar inteligentemente las columnas reales
         idx_cod = next((i for i, c in enumerate(columnas_disponibles) if 'cod' in c.lower() or 'id' in c.lower()), 0)
         idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 1)
         idx_precio = next((i for i, c in enumerate(columnas_disponibles) if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), len(columnas_disponibles) - 1)
@@ -77,19 +86,19 @@ if archivo_excel:
     except Exception as e:
         st.sidebar.error(f"Error al analizar la estructura del Excel: {e}")
 
-# Ejecución del motor inteligente
+# Ejecución del motor inteligente híbrido
 if archivo_excel and imagen_pedido and api_key:
     if st.button("🔥 Generar Cotización Automática"):
         try:
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            st.info("🔄 Buscando coincidencias exactas en tu catálogo...")
+            st.info("🔄 Buscando y cruzando coincidencias en tu catálogo...")
             
-            # Cargar dataframe completo ignorando la fila de logos
             df = pd.read_excel(archivo_excel, header=1)
             df.columns = [str(c).strip() for c in df.columns]
             
+            # Pre-procesar el catálogo completo quitando acentos y minúsculas
             df['__desc_clean'] = df[col_desc].apply(normalizar_texto)
             df['__cod_clean'] = df[col_codigo].apply(normalizar_texto)
             
@@ -122,37 +131,45 @@ if archivo_excel and imagen_pedido and api_key:
                 if not termino_busqueda:
                     continue
                 
+                # Normalizar y quitar plurales tanto al pedido como al inventario
                 termino_norm = normalizar_texto(termino_busqueda)
-                palabras_busqueda = [p for p in termino_norm.split() if len(p) > 2] # Ignorar palabras cortas como 'de', 'el'
+                termino_sin_plural = limpiar_plurales(termino_norm)
+                palabras_busqueda = [p for p in termino_sin_plural.split() if len(p) > 2]
                 
                 if not palabras_busqueda:
                     palabras_busqueda = [termino_norm]
                 
-                # Algoritmo de penalización: Exigimos que al menos coincida el 60% de las palabras del pedido
+                # Calcular cuántas palabras del pedido calzan con el artículo del inventario
                 def calcular_coincidencias(row):
-                    texto_inventario = str(row['__desc_clean']) + " " + str(row['__cod_clean'])
+                    texto_inventario = limpiar_plurales(str(row['__desc_clean']) + " " + str(row['__cod_clean']))
                     coincidencias = sum(1 for p in palabras_busqueda if p in texto_inventario)
-                    return coincidencias if coincidencias >= (len(palabras_busqueda) * 0.6) else 0
+                    return coincidencias
                 
                 df['__score'] = df.apply(calcular_coincidencias, axis=1)
                 max_score = df['__score'].max()
                 
+                # Si encontró algún grado de coincidencia (al menos 1 palabra clave)
                 if max_score > 0:
                     mejor_coincidencia = df[df['__score'] == max_score].iloc[0]
                     precio_final = limpiar_precio(mejor_coincidencia[col_precio])
                     
+                    # Si el match es parcial (ej: menos de la mitad de las palabras calzan), ponemos alerta visual
+                    score_relativo = max_score / len(palabras_busqueda)
+                    alerta_visual = ""
+                    if score_relativo < 0.5:
+                        alerta_visual = "⚠️ (Revisar coincidencia) "
+                    
                     cotizacion_final.append({
                         "Código": mejor_coincidencia[col_codigo],
-                        "Descripción Catálogo": mejor_coincidencia[col_desc],
+                        "Descripción Catálogo": f"{alerta_visual}{mejor_coincidencia[col_desc]}",
                         "Cantidad": cantidad,
                         "Precio Unitario": precio_final,
                         "Total": precio_final * cantidad
                     })
                 else:
-                    # Si no es un match seguro, te avisa en pantalla en vez de poner cualquier cosa
                     cotizacion_final.append({
                         "Código": "MANUAL",
-                        "Descripción Catálogo": f"🔍 REVISAR: No se halló nada parecido a '{termino_busqueda}'",
+                        "Descripción Catálogo": f"❌ NO ENCONTRADO: '{termino_busqueda}'",
                         "Cantidad": cantidad,
                         "Precio Unitario": 0.0,
                         "Total": 0.0
@@ -160,7 +177,7 @@ if archivo_excel and imagen_pedido and api_key:
             
             if cotizacion_final:
                 df_resultado = pd.DataFrame(cotizacion_final)
-                st.success("¡Cotización procesada!")
+                st.success("¡Cotización procesada con éxito!")
                 st.dataframe(df_resultado, use_container_width=True)
                 
                 total_neto = df_resultado["Total"].sum()
