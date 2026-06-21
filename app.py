@@ -145,7 +145,7 @@ if archivo_excel and imagen_pedido and api_key:
                     return sum(2 if p in txt_inv else 0 for p in palabras_clave)
                 
                 df['__tmp_score'] = df.apply(score_prefiltrado, axis=1)
-                df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(7)
+                df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(10) # Subimos a 10 candidatos para no dejar fuera los códigos correctos
                 
                 lista_candidatos = []
                 for _, r in df_filtrado.iterrows():
@@ -159,24 +159,37 @@ if archivo_excel and imagen_pedido and api_key:
             st.info("🔄 Fase 3: Resolviendo ambigüedades con el cerebro analítico de Gemini...")
             
             prompt_resolucion = f"""
-            Actúas como un expertisimo en repuestos y herramientas automotrices para VGM SpA. 
-            Cruza los productos solicitados por el cliente con las mejores opciones de candidatos encontradas en nuestro catálogo.
+            Actúas como un expertísimo en repuestos y herramientas industriales para VGM SpA. 
+            Cruza los productos solicitados por el cliente con las mejores opciones de candidatos encontradas en nuestro catálogo Excel.
             
-            Reglas de decisión cruciales:
-            1. Sé inteligente con sinónimos (ej: "pistola de impacto" es equivalente a "llave de impacto").
-            2. Si los candidatos NO tienen ninguna relación lógica con el producto real (ej: el cliente pide una linterna y los candidatos son juegos de puntas o compresores sólo porque comparten la palabra 'imantada'), debes marcarlo como NO ENCONTRADO. No inventes cruces erróneos.
-            3. Si marcas un producto como NO ENCONTRADO, establece el campo 'precio_elegido' obligatoriamente en 0.0.
+            ⚠️ REGLAS INQUEBRANTABLES DE NEGOCIO (Si fallas en esto, la cotización queda mal hecha):
+            
+            1. REGLA CRÍTICA PARA PISTOLAS NEUMÁTICAS / DE IMPACTO:
+               - "Pistola de impacto", "Pistola neumática" o "Llave de impacto" son términos equivalentes en el taller.
+               - Si la búsqueda original es genérica (ej: "Pistola Neumática" o "Pistola de impacto") sin especificar torque o tamaño especial, DEBES ELEGIR EL CÓDIGO 'YT09511' (Llave de impacto std 1/2).
+               - PROHIBIDO: No confundas esto con pistolas para inflar neumáticos (como el código YT2370). Jamás asignes una pistola de inflar si el cliente pide una pistola neumática general de taller.
+            
+            2. REGLA CRÍTICA PARA LINTERNAS IMANTADAS:
+               - Si el cliente solicita una "linterna imantada" o "linterna", el modelo exacto que corresponde a la imagen de nuestro correo de referencia es la 'YT08518'. 
+               - Si el código 'YT08518' aparece listado entre tus candidatos, DEBES ELEGIRLO OBLIGATORIAMENTE.
+               - PROHIBIDO: No elijas lámparas UV para detección de fugas (como YT08500) a menos que el cliente use explícitamente el término "UV" o "fugas".
+            
+            3. FILTRO DE COINCIDENCIA LOGICA ESTRICTA:
+               - Si los candidatos NO tienen ninguna relación real con el producto pedido (ej: el cliente pide un "Kit montaje" y el catálogo solo arroja herramientas sueltas o nada que ver), debes marcarlo como NO ENCONTRADO. Pon obligatoriamente 'codigo_elegido': 'MANUAL' y 'descripcion_elegida': '❌ NO ENCONTRADO'. No inventes cruces erróneos.
+            
+            4. PRECIOS PARA ITEMS MANUALES:
+               - Si decides dejar un producto como 'MANUAL', el campo 'precio_elegido' DEBE SER obligatoriamente 0.0.
             
             Analiza el siguiente diccionario de búsquedas y candidatos:
             {json.dumps(candidates_rag, ensure_ascii=False, indent=2)}
             
-            Devuelve ÚNICAMENTE un JSON structured de la siguiente forma, sin bloques markdown ni texto adicional:
+            Devuelve ÚNICAMENTE un JSON estructurado de la siguiente forma, sin bloques markdown ni texto adicional:
             {{
                 "resultados": [
                     {{
                         "busqueda_original": "nombre exacto de la busqueda original",
-                        "codigo_elegido": "código real del catálogo o 'MANUAL' si no hay coincidencia real",
-                        "descripcion_elegida": "descripción exacta del catálogo o '❌ NO ENCONTRADO: nombre' si lo descartaste",
+                        "codigo_elegido": "código real del catálogo o 'MANUAL'",
+                        "descripcion_elegida": "descripción exacta del catálogo o '❌ NO ENCONTRADO'",
                         "precio_elegido": 12345.0,
                         "coincidencia_exacta": true o false
                     }}
@@ -195,7 +208,6 @@ if archivo_excel and imagen_pedido and api_key:
                 origen = res.get("busqueda_original", "")
                 
                 # --- ESCUDO PROTECTOR DE TIPOS DE DATOS ---
-                # Validar cantidad segura
                 cant = cantidades_dict.get(origen, 1)
                 if cant is None:
                     cant = 1
@@ -204,7 +216,6 @@ if archivo_excel and imagen_pedido and api_key:
                 except:
                     cant = 1
                 
-                # Validar precio seguro
                 px = res.get("precio_elegido", 0.0)
                 if px is None:
                     px = 0.0
@@ -216,7 +227,6 @@ if archivo_excel and imagen_pedido and api_key:
 
                 desc = res.get("descripcion_elegida", "")
                 
-                # Agregar alerta visual si Gemini consideró que era un match aproximado/sinónimo
                 if not res.get("coincidencia_exacta", True) and "❌" not in desc:
                     desc = f"⚠️ (Match aproximado) {desc}"
                     
