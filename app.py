@@ -9,7 +9,9 @@ import unicodedata
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
 st.title("Cotizador Express - VGM SpA 🚀")
 
-# Función para limpiar texto (quitar acentos, minúsculas y caracteres raros)
+# Lista de palabras vacías en español para limpiar búsquedas
+STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
+
 def normalizar_texto(texto):
     if pd.isna(texto):
         return ""
@@ -19,18 +21,16 @@ def normalizar_texto(texto):
         texto = texto.replace(char, ' ')
     return texto
 
-# Función inteligente para remover el plural en español ('s') y mejorar búsquedas
 def limpiar_plurales(texto):
     palabras = texto.split()
     limpias = []
     for p in palabras:
         if len(p) > 3 and p.endswith('s'):
-            limpias.append(p[:-1])  # Quita la 's' al final
+            limpias.append(p[:-1])
         else:
             limpias.append(p)
     return " ".join(limpias)
 
-# Función para procesar y limpiar precios chilenos de forma segura
 def limpiar_precio(valor):
     if pd.isna(valor):
         return 0.0
@@ -67,7 +67,7 @@ with col2:
     st.subheader("2. Sube el pantallazo del pedido (WhatsApp / Correo)")
     imagen_pedido = st.file_uploader("Selecciona la imagen del pedido", type=["png", "jpg", "jpeg"])
 
-# LEER EXCEL: Ignorando la fila de logos superiores
+# Procesamiento de columnas del Excel
 if archivo_excel:
     try:
         df_preview = pd.read_excel(archivo_excel, header=1, nrows=5)
@@ -86,19 +86,19 @@ if archivo_excel:
     except Exception as e:
         st.sidebar.error(f"Error al analizar la estructura del Excel: {e}")
 
-# Ejecución del motor inteligente híbrido
+# Ejecución del motor híbrido con IA integrada
 if archivo_excel and imagen_pedido and api_key:
-    if st.button("🔥 Generar Cotización Automática"):
+    if st.button("🔥 Generar Cotización Inteligente"):
         try:
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            st.info("🔄 Buscando y cruzando coincidencias en tu catálogo...")
+            st.info("🔄 Fase 1: Leyendo imagen del pedido con Visión Artificial...")
             
             df = pd.read_excel(archivo_excel, header=1)
             df.columns = [str(c).strip() for c in df.columns]
             
-            # Pre-procesar el catálogo completo quitando acentos y minúsculas
+            # Optimización de índices de búsqueda acelerada
             df['__desc_clean'] = df[col_desc].apply(normalizar_texto)
             df['__cod_clean'] = df[col_codigo].apply(normalizar_texto)
             
@@ -122,70 +122,103 @@ if archivo_excel and imagen_pedido and api_key:
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
             
-            cotizacion_final = []
+            st.info("🔄 Fase 2: Pre-filtrando candidatos semánticos del catálogo...")
+            
+            # Mapear cantidades indexadas por la búsqueda original
+            cantidades_dict = {item.get("busqueda", ""): item.get("cantidad", 1) for item in lista_productos}
+            candidates_rag = {}
             
             for item in lista_productos:
-                termino_busqueda = item.get("busqueda", "")
-                cantidad = item.get("cantidad", 1)
-                
-                if not termino_busqueda:
+                termino = item.get("busqueda", "")
+                if not termino:
                     continue
                 
-                # Normalizar y quitar plurales tanto al pedido como al inventario
-                termino_norm = normalizar_texto(termino_busqueda)
+                termino_norm = normalizar_texto(termino)
                 termino_sin_plural = limpiar_plurales(termino_norm)
-                palabras_busqueda = [p for p in termino_sin_plural.split() if len(p) > 2]
+                palabras_clave = [p for p in termino_sin_plural.split() if len(p) > 2 and p not in STOP_WORDS]
                 
-                if not palabras_busqueda:
-                    palabras_busqueda = [termino_norm]
+                if not palabras_clave:
+                    palabras_clave = [termino_norm]
                 
-                # Calcular cuántas palabras del pedido calzan con el artículo del inventario
-                def calcular_coincidencias(row):
-                    texto_inventario = limpiar_plurales(str(row['__desc_clean']) + " " + str(row['__cod_clean']))
-                    coincidencias = sum(1 for p in palabras_busqueda if p in texto_inventario)
-                    return coincidencias
+                def score_prefiltrado(row):
+                    txt_inv = str(row['__desc_clean']) + " " + str(row['__cod_clean'])
+                    return sum(2 if p in txt_inv else 0 for p in palabras_clave)
                 
-                df['__score'] = df.apply(calcular_coincidencias, axis=1)
-                max_score = df['__score'].max()
+                df['__tmp_score'] = df.apply(score_prefiltrado, axis=1)
+                df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(7)
                 
-                # Si encontró algún grado de coincidencia (al menos 1 palabra clave)
-                if max_score > 0:
-                    mejor_coincidencia = df[df['__score'] == max_score].iloc[0]
-                    precio_final = limpiar_precio(mejor_coincidencia[col_precio])
-                    
-                    # Si el match es parcial (ej: menos de la mitad de las palabras calzan), ponemos alerta visual
-                    score_relativo = max_score / len(palabras_busqueda)
-                    alerta_visual = ""
-                    if score_relativo < 0.5:
-                        alerta_visual = "⚠️ (Revisar coincidencia) "
-                    
-                    cotizacion_final.append({
-                        "Código": mejor_coincidencia[col_codigo],
-                        "Descripción Catálogo": f"{alerta_visual}{mejor_coincidencia[col_desc]}",
-                        "Cantidad": cantidad,
-                        "Precio Unitario": precio_final,
-                        "Total": precio_final * cantidad
+                lista_candidatos = []
+                for _, r in df_filtrado.iterrows():
+                    lista_candidatos.append({
+                        "codigo": str(r[col_codigo]),
+                        "descripcion": str(r[col_desc]),
+                        "precio": float(limpiar_precio(r[col_precio]))
                     })
-                else:
-                    cotizacion_final.append({
-                        "Código": "MANUAL",
-                        "Descripción Catálogo": f"❌ NO ENCONTRADO: '{termino_busqueda}'",
-                        "Cantidad": cantidad,
-                        "Precio Unitario": 0.0,
-                        "Total": 0.0
-                    })
+                candidates_rag[termino] = lista_candidatos
+
+            st.info("🔄 Fase 3: Resolviendo ambigüedades con el cerebro analítico de Gemini...")
             
+            prompt_resolucion = f"""
+            Actúas como un experto en repuestos y herramientas automotrices para VGM SpA. 
+            Cruza los productos solicitados por el cliente con las mejores opciones de candidatos encontradas en nuestro catálogo.
+            
+            Reglas de decisión cruciales:
+            1. Sé inteligente con sinónimos (ej: "pistola de impacto" es equivalente a "llave de impacto").
+            2. Si los candidatos NO tienen ninguna relación lógica con el producto real (ej: el cliente pide una linterna y los candidatos son juegos de puntas o compresores sólo porque comparten la palabra 'imantada'), debes marcarlo como NO ENCONTRADO. No inventes cruces erróneos.
+            
+            Analiza el siguiente diccionario de búsquedas y candidatos:
+            {json.dumps(candidates_rag, ensure_ascii=False, indent=2)}
+            
+            Devuelve ÚNICAMENTE un JSON estructurado de la siguiente forma, sin bloques markdown ni texto adicional:
+            {{
+                "resultados": [
+                    {{
+                        "busqueda_original": "nombre exacto de la busqueda original",
+                        "codigo_elegido": "código real del catálogo o 'MANUAL' si no hay coincidencia real",
+                        "descripcion_elegida": "descripción exacta del catálogo o '❌ NO ENCONTRADO: nombre' si lo descartaste",
+                        "precio_elegido": 12345.0,
+                        "coincidencia_exacta": true o false
+                    }}
+                ]
+            }}
+            """
+            
+            response_resolucion = model.generate_content(prompt_resolucion)
+            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("```", "")
+            
+            datos_finales = json.loads(texto_resolucion)
+            resultados_lista = datos_finales.get("resultados", [])
+            
+            cotizacion_final = []
+            for res in resultados_lista:
+                origen = res.get("busqueda_original", "")
+                cant = cantidades_dict.get(origen, 1)
+                px = res.get("precio_elegido", 0.0)
+                desc = res.get("descripcion_elegida", "")
+                
+                # Agregar alerta visual si Gemini consideró que era un match aproximado/sinónimo
+                if not res.get("coincidencia_exacta", True) and "❌" not in desc:
+                    desc = f"⚠️ (Match aproximado) {desc}"
+                    
+                cotizacion_final.append({
+                    "Código": res.get("codigo_elegido", "MANUAL"),
+                    "Descripción Catálogo": desc,
+                    "Cantidad": cant,
+                    "Precio Unitario": px,
+                    "Total": px * cant
+                })
+                
             if cotizacion_final:
                 df_resultado = pd.DataFrame(cotizacion_final)
-                st.success("¡Cotización procesada con éxito!")
+                st.success("¡Cotización inteligente procesada con éxito!")
                 st.dataframe(df_resultado, use_container_width=True)
                 
                 total_neto = df_resultado["Total"].sum()
                 st.metric(label="Total Neto Cotizado (CLP)", value=f"${total_neto:,.0f}")
             else:
-                st.warning("No se procesaron productos interpretables.")
+                st.warning("No se pudieron asociar los productos de forma lógica.")
                 
         except Exception as e:
-            st.error(f"Error durante el proceso: {e}")
+            st.error(f"Error crítico en el motor de IA: {e}")
 else:
     st.info("Introduce tu Gemini API Key a la izquierda y sube tus dos archivos para comenzar.")
