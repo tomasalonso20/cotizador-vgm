@@ -97,7 +97,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         except:
             pass
             
-    # Estructura de Encabezados (Idéntica a prueba IA_2.xlsx)
+    # Estructura de Encabezados (Idéntica a tu formato base)
     ws["A3"] = f"COTIZACIÓN N°{nro_cotiz}"
     ws["A3"].font = font_titulo
     
@@ -128,7 +128,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         celda.border = borde_delgado
     ws.row_dimensions[fila_tabla_inicio].height = 28
     
-    # Volcado de productos con inyección de imágenes al vuelo
+    # Volcado de productos con marcas dinámicas extraídas desde la fuente original
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
         cod_original = str(fila["Código"])
@@ -157,7 +157,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
                 img_excel.width = 115
                 img_excel.height = 80
                 ws.add_image(img_excel, f"G{fila_actual}")
-            except Exception as e:
+            except:
                 ws.cell(row=fila_actual, column=7, value="[Error de Imagen]").font = font_normal
         
         for c_idx in range(1, 8):
@@ -225,7 +225,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     ws.cell(row=fila_actual, column=1, value="A la espera de sus comentarios, le saluda atentamente :").font = font_normal
     
-    # Ancho de columnas para evitar recortes
+    # Ancho de columnas óptimo para evitar textos cortados
     ws.column_dimensions['A'].width = 14
     ws.column_dimensions['B'].width = 14
     ws.column_dimensions['C'].width = 46
@@ -262,7 +262,7 @@ with st.sidebar:
     with st.expander("⚙️ Verificación de Columnas Catálogo", expanded=False):
         api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
 
-# Cuadrícula principal de carga
+# Cuadrícula principal de carga de archivos
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("1. Sube tu catálogo de precios (.xlsx)")
@@ -271,7 +271,7 @@ with col2:
     st.subheader("2. Sube el pantallazo de la solicitud")
     imagen_pedido = st.file_uploader("Selecciona la imagen del pedido", type=["png", "jpg", "jpeg"])
 
-# Procesamiento Inteligente
+# Procesamiento Inteligente mediante Motor RAG Cruzado
 if archivo_excel and imagen_pedido and api_key:
     if st.button("🔥 Generar Cotización Excel Inteligente"):
         try:
@@ -282,7 +282,7 @@ if archivo_excel and imagen_pedido and api_key:
             df = pd.read_excel(archivo_excel, header=1)
             df.columns = [str(c).strip() for c in df.columns]
             
-            # Mapeo y autodetección robusta de columnas (incluida la Marca)
+            # Autodetección milimétrica de columnas en el archivo de precios
             columnas_disponibles = list(df.columns)
             idx_cod = next((i for i, c in enumerate(columnas_disponibles) if 'cod' in c.lower() or 'id' in c.lower()), 0)
             idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 1)
@@ -324,8 +324,7 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response = model.generate_content([prompt_extraccion, imagen_lista])
-            texto_limpio = response.text.strip().replace("
-```json", "").replace("```", "")
+            texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
             
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
@@ -359,15 +358,15 @@ if archivo_excel and imagen_pedido and api_key:
                         "descripcion": str(r[col_desc]), 
                         "precio": float(limpiar_precio(r[col_precio]))
                     }
-                    if col_marca:
+                    if col_marca and col_marca in df.columns:
                         c_dict["marca"] = str(r[col_marca])
                     cand_list.append(c_dict)
                     
                 candidates_rag[termino] = cand_list
 
-            st.info("🔄 Fase 3: Homologando códigos mediante Inteligencia Artificial...")
+            st.info("🔄 Fase 3: Resolviendo códigos y cruzando marcas directamente desde tu catálogo...")
             prompt_resolucion = f"""
-            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
+            Actúas como un expert en herramientas industriales para la empresa VGM SpA.
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN:
@@ -380,7 +379,7 @@ if archivo_excel and imagen_pedido and api_key:
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             {json.dumps(candidates_rag, ensure_ascii=False, indent=2)}
             
-            Devuelve ÚNICAMENTE un JSON structured de la siguiente forma, sin bloques markdown ni texto adicional:
+            Devuelve ÚNICAMENTE un JSON estructurado de la siguiente forma, sin bloques markdown ni texto adicional:
             {{
                 "resultados": [
                     {{
@@ -395,8 +394,7 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response_resolucion = model.generate_content(prompt_resolucion)
-            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("
-```", "")
+            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("```", "")
             
             datos_finales = json.loads(texto_resolucion)
             resultados_lista = datos_finales.get("resultados", [])
@@ -407,13 +405,12 @@ if archivo_excel and imagen_pedido and api_key:
                 cant_val = cantidades_dict.get(origen, 1)
                 cant = int(cant_val) if cant_val is not None else 1
                 
-                # Respaldo inicial desde la resolución del LLM
                 cod = str(res.get("codigo_elegido", "MANUAL")).strip()
                 desc = str(res.get("descripcion_elegida", "❌ NO ENCONTRADO"))
                 px_lista = float(res.get("precio_elegido", 0.0))
-                marca = "YATO/VOREL" # Default base
+                marca = "YATO/VOREL"
                 
-                # CRUCE EXACTO CON BASE DE DATOS (EXCEL): Extraemos la verdad directo del archivo
+                # CRUCE DE DATOS EN TIEMPO REAL: Extrae la marca original directo desde tu archivo cargado
                 if cod != "MANUAL":
                     cod_norm = normalizar_texto(cod)
                     match_rows = df[df['__cod_clean'] == cod_norm]
@@ -424,10 +421,10 @@ if archivo_excel and imagen_pedido and api_key:
                         r_match = match_rows.iloc[0]
                         desc = str(r_match[col_desc])
                         px_lista = float(limpiar_precio(r_match[col_precio]))
-                        if col_marca and col_marca in df.columns:
+                        if col_marca and col_marca in df.columns and not pd.isna(r_match[col_marca]):
                             marca = str(r_match[col_marca]).strip().upper()
                 
-                # Regla de seguridad dura para la marca de la linterna de cabeza corporativa
+                # Regla dura para la linterna de cabeza de marca corporativa
                 if cod.upper() == "L-HEAD-1" or "HEAD" in desc.upper() or "CABEZA" in desc.upper():
                     marca = "IRIMO"
                 
@@ -473,7 +470,7 @@ if archivo_excel and imagen_pedido and api_key:
                 
                 st.markdown("---")
                 
-                # Procesar fotos de productos subidas de manera robusta
+                # Procesar fotos de productos subidas en la interfaz de la barra lateral
                 dict_imagenes_procesadas = {}
                 if fotos_productos:
                     for foto in fotos_productos:
