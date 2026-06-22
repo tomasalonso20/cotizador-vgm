@@ -4,6 +4,7 @@ import pandas as pd
 import json
 from PIL import Image
 import unicodedata
+import io
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
@@ -49,12 +50,50 @@ def limpiar_precio(valor):
         except:
             return 0.0
 
+def generar_excel_comercial(df_cotiz, cliente, empresa, desc_porcentaje, total_neto, iva, total_bruto):
+    output = io.BytesIO()
+    df_excel = df_cotiz.copy()
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_excel.to_excel(writer, sheet_name="Cotización", index=False, startrow=7)
+        
+        workbook = writer.book
+        worksheet = writer.sheets["Cotización"]
+        
+        # Inyección de metadatos comerciales en la cabecera del Excel
+        worksheet["A1"] = "COTIZACIÓN COMERCIAL - VGM SpA"
+        worksheet["A3"] = f"Empresa: {empresa if empresa else 'No especificada'}"
+        worksheet["A4"] = f"Cliente: {cliente if cliente else 'No especificado'}"
+        worksheet["A5"] = f"Descuento Comercial: {desc_porcentaje}%"
+        worksheet["E3"] = f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}"
+        
+        # Añadir bloque de totales al final del archivo
+        start_row = len(df_excel) + 9
+        worksheet[f"D{start_row}"] = "Total Neto:"
+        worksheet[f"E{start_row}"] = total_neto
+        worksheet[f"D{start_row+1}"] = "IVA (19%):"
+        worksheet[f"E{start_row+1}"] = iva
+        worksheet[f"D{start_row+2}"] = "Total Bruto:"
+        worksheet[f"E{start_row+2}"] = total_bruto
+        
+    return output.getvalue()
+
 # Inicialización de la barra lateral
 with st.sidebar:
-    st.subheader("⚙️ Configuración Básica")
-    api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
+    st.subheader("💼 Datos de la Cotización")
+    nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej: Claudia Araya")
+    empresa_cliente = st.text_input("Empresa / Entidad:", placeholder="Ej: Tattersall")
+    descuento_aplicar = st.number_input("Descuento a aplicar (%)", min_value=0, max_value=100, value=0, step=1)
+    
     st.markdown("---")
-    st.subheader("📊 Verificación de Columnas")
+    
+    # Configuración técnica congelada/oculta por defecto
+    with st.expander("⚙️ Configuración del Sistema (API / Columnas)", expanded=False):
+        api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
+        st.subheader("📊 Verificación de Columnas")
+        col_codigo = "CODIGO"
+        col_desc = "DESCRIPCION"
+        col_precio = "PRECIO UNITARIO NETO"
 
 # Columnas de la interfaz principal
 col1, col2 = st.columns(2)
@@ -67,7 +106,7 @@ with col2:
     st.subheader("2. Sube el pantallazo del pedido (WhatsApp / Correo)")
     imagen_pedido = st.file_uploader("Selecciona la imagen del pedido", type=["png", "jpg", "jpeg"])
 
-# Procesamiento de columnas del Excel
+# Procesamiento interno de columnas del Excel (mantiene lógica de asignación automática)
 if archivo_excel:
     try:
         df_preview = pd.read_excel(archivo_excel, header=1, nrows=5)
@@ -77,12 +116,9 @@ if archivo_excel:
         idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 1)
         idx_precio = next((i for i, c in enumerate(columnas_disponibles) if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), len(columnas_disponibles) - 1)
         
-        with st.sidebar:
-            st.write("Confirma que los títulos correspondan a tu Excel:")
-            col_codigo = st.selectbox("Columna de Código:", columnas_disponibles, index=idx_cod)
-            col_desc = st.selectbox("Columna de Descripción:", columnas_disponibles, index=idx_desc)
-            col_precio = st.selectbox("Columna de Precio Neto:", columnas_disponibles, index=idx_precio)
-            st.success("✅ Títulos de columnas cargados con éxito")
+        col_codigo = columnas_disponibles[idx_cod]
+        col_desc = columnas_disponibles[idx_desc]
+        col_precio = columnas_disponibles[idx_precio]
     except Exception as e:
         st.sidebar.error(f"Error al analizar la estructura del Excel: {e}")
 
@@ -98,7 +134,6 @@ if archivo_excel and imagen_pedido and api_key:
             df = pd.read_excel(archivo_excel, header=1)
             df.columns = [str(c).strip() for c in df.columns]
             
-            # Optimización de índices de búsqueda acelerada
             df['__desc_clean'] = df[col_desc].apply(normalizar_texto)
             df['__cod_clean'] = df[col_codigo].apply(normalizar_texto)
             
@@ -170,14 +205,12 @@ if archivo_excel and imagen_pedido and api_key:
                     score = 0
                     for p in palabras_clave:
                         if p in txt_inv:
-                            score += 5  # Incrementamos peso base de acierto
+                            score += 5
                             if f" {p} " in txt_inv:
-                                score += 3  # Bonus por palabra exacta delimitada
+                                score += 3
                     return score
                 
                 df['__tmp_score'] = df.apply(score_prefiltrado, axis=1)
-                
-                # AMPLIACIÓN CRÍTICA: Subimos a 40 candidatos para asegurar que los códigos específicos no queden fuera
                 df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(40)
                 
                 lista_candidatos = []
@@ -232,37 +265,72 @@ if archivo_excel and imagen_pedido and api_key:
             cotizacion_final = []
             for res in resultados_lista:
                 origen = res.get("busqueda_original", "")
-                
-                cant = cantidades_dict.get(origen, 1)
-                cant = int(cant) if cant is not None else 1
-                
-                px = res.get("precio_elegido", 0.0)
-                px = float(px) if px is not None else 0.0
-
+                cant = int(cantidades_dict.get(origen, 1))
+                px_lista = float(res.get("precio_elegido", 0.0))
                 desc = res.get("descripcion_elegida", "❌ NO ENCONTRADO")
                 cod = res.get("codigo_elegido", "MANUAL")
                 
                 if cod == "MANUAL" or "❌" in desc:
                     desc = f"❌ NO ENCONTRADO: (Falta en catálogo o requiere código manual para '{origen}')"
-                    px = 0.0
+                    px_lista = 0.0
                 elif not res.get("coincidencia_exacta", True):
                     desc = f"⚠️ (Match sugerido) {desc}"
+                
+                # Aplicación matemática del descuento comercial por ítem
+                descuento_unidades = px_lista * (descuento_aplicar / 100)
+                px_final_neto = px_lista - descuento_unidades
+                total_item_neto = px_final_neto * cant
                     
                 cotizacion_final.append({
                     "Código": cod,
                     "Descripción Catálogo": desc,
                     "Cantidad": cant,
-                    "Precio Unitario": px,
-                    "Total": px * cant
+                    "Precio Lista (Neto)": px_lista,
+                    "Descuento Aplicado": f"{descuento_aplicar}%",
+                    "Precio Final (Neto)": px_final_neto,
+                    "Total Neto": total_item_neto
                 })
                 
             if cotizacion_final:
                 df_resultado = pd.DataFrame(cotizacion_final)
-                st.success("¡Cotización inteligente procesada con éxito con motor RAG expandido de amplio espectro!")
+                st.success("¡Cotización inteligente procesada con éxito!")
+                
+                # Mostrar tabla de resultados con los nuevos cálculos de cara al usuario
                 st.dataframe(df_resultado, use_container_width=True)
                 
-                total_neto = df_resultado["Total"].sum()
-                st.metric(label="Total Neto Cotizado (CLP)", value=f"${total_neto:,.0f}")
+                # Bloque de Cálculos Tributarios Estándar (Chile)
+                subtotal_lista = (df_resultado["Precio Lista (Neto)"] * df_resultado["Cantidad"]).sum()
+                total_neto_final = df_resultado["Total Neto"].sum()
+                descuento_total_pesos = subtotal_lista - total_neto_final
+                iva_calculado = total_neto_final * 0.19
+                total_bruto = total_neto_final + iva_calculado
+                
+                st.markdown("### 📊 Desglose de Valores Comerciales (CLP)")
+                c_neto, c_desc, c_neto_f, c_iva, c_bruto = st.columns(5)
+                
+                c_neto.metric(label="Total Lista Neto", value=f"${subtotal_lista:,.0f}")
+                c_desc.metric(label="Descuento Total", value=f"-${descuento_total_pesos:,.0f}")
+                c_neto_f.metric(label="Neto Final Cliente", value=f"${total_neto_final:,.0f}")
+                c_iva.metric(label="IVA (19%)", value=f"${iva_calculado:,.0f}")
+                c_bruto.metric(label="Total Bruto a Pagar", value=f"${total_bruto:,.0f}")
+                
+                st.markdown("---")
+                st.subheader("📥 Descargar Documento Comercial")
+                
+                # Generación del archivo binario de Excel para descarga inmediata
+                excel_binario = generar_excel_comercial(
+                    df_resultado, nombre_cliente, empresa_cliente, 
+                    descuento_aplicar, total_neto_final, iva_calculado, total_bruto
+                )
+                
+                nombre_archivo_excel = f"Cotizacion_{empresa_cliente.replace(' ', '_') if empresa_cliente else 'Cliente'}_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx"
+                
+                st.download_button(
+                    label="🟢 Descargar Cotización en Excel",
+                    data=excel_binario,
+                    file_name=nombre_archivo_excel,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
             else:
                 st.warning("No se pudieron asociar los productos de forma lógica.")
                 
