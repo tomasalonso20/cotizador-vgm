@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Móvil Ultra-Eficiente)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Inteligente Premium)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -72,7 +72,7 @@ def leer_csv_tolerante(ruta_archivo):
                 fila_cabecera_idx = 0
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
-                    # Exigimos coincidencia múltiple para asegurar que es la fila de títulos reales
+                    # Corregido NameError: Buscamos palabras clave reales de columnas comerciales
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
                     if coincidencias >= 2:
                         fila_cabecera_idx = idx
@@ -306,7 +306,7 @@ with st.sidebar:
 st.subheader("1. Sube el pantallazo de la solicitud del cliente")
 imagen_pedido = st.file_uploader("Selecciona la imagen del pedido o correo", type=["png", "jpg", "jpeg"])
 
-# MOTOR DE CARGA: LECTURA DEL CATÁLOGO BASE VIGENTE (Con filtro estricto anti-títulos)
+# MOTOR DE CARGA: LECTURA DEL CATÁLOGO BASE VIGENTE
 df_catalogo = leer_csv_tolerante("lista_vigente.csv")
 
 if df_catalogo is not None:
@@ -417,9 +417,8 @@ if df_catalogo is not None and imagen_pedido and api_key:
                     
                 candidates_rag[termino] = cand_list
 
-            st.info("🔄 Fase 3: Resolviendo códigos y auditando historial comercial...")
+            st.info("🔄 Fase 3: Resolviendo códigos y auditando jerarquía comercial...")
             
-            # CONCATENACIÓN ULTRA LIMPIA: Solución definitiva al SyntaxError de llaves literales
             prompt_resolucion = """
             Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
@@ -481,24 +480,6 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 if cod.upper() == "L-HEAD-1" or "HEAD" in desc.upper() or "CABEZA" in desc.upper():
                     marca = "IRIMO"
                 
-                # AUDITORÍA MEDIANTE EL CEREBRO HISTÓRICO DE VENTAS
-                if df_historial is not None and cod != "MANUAL" and empresa_cliente:
-                    try:
-                        columnas_h = list(df_historial.columns)
-                        col_h_cli = next((c for c in columnas_h if 'cli' in c.lower() or 'emp' in c.lower() or 'raz' in c.lower() or 'nom' in c.lower()), columnas_h[0])
-                        col_h_cod = next((c for c in columnas_h if 'cod' in c.lower() or 'art' in c.lower() or 'pro' in c.lower()), columnas_h[1] if len(columnas_h) > 1 else columnas_h[0])
-                        col_h_px = next((c for c in columnas_h if 'prec' in c.lower() or 'net' in c.lower() or 'val' in c.lower() or 'vta' in c.lower() or 'tot' in c.lower()), columnas_h[-1])
-                        
-                        term_emp = normalizar_texto(empresa_cliente)
-                        df_h_filtrado = df_historial[df_historial[col_h_cli].astype(str).apply(normalizar_texto).str.contains(term_emp, na=False, regex=False)]
-                        match_hist_prod = df_h_filtrado[df_h_filtrado[col_h_cod].astype(str).str.strip().str.lower() == cod.lower()]
-                        
-                        if not match_hist_prod.empty:
-                            ultimo_precio_cobrado = float(limpiar_precio(match_hist_prod.iloc[-1][col_h_px]))
-                            desc = f"✨ [Historial ERP: Cobrado ${ultimo_precio_cobrado:,.0f} anteriormente] | " + desc
-                    except:
-                        pass
-                
                 if cod == "MANUAL" or "❌" in desc:
                     desc = f"❌ NO ENCONTRADO: (Falta en catálogo o requiere código manual para '{origen}')"
                     px_lista = 0.0
@@ -506,13 +487,45 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 elif not res.get("coincidencia_exacta", True):
                     desc = f"⚠️ (Match sugerido) {desc}"
                 
+                # CÁLCULO INTELIGENTE SEGÚN LA NUEVA JERARQUÍA COMERCIAL SOLICITADA
                 precio_manual_val = limpiar_precio(precio_manual_input)
-                if descuento_aplicar == 0 and precio_manual_val > 0 and cod != "MANUAL":
+                
+                if precio_manual_val > 0:
                     px_final_neto = precio_manual_val
                     texto_descuento_col = "Precio Especial"
-                else:
+                elif descuento_aplicar > 0:
                     px_final_neto = px_lista - (px_lista * (descuento_aplicar / 100))
                     texto_descuento_col = f"{descuento_aplicar}%"
+                else:
+                    # Si el descuento y precio especial están en blanco (0), viajamos al Historial de Ventas
+                    precio_historico_encontrado = False
+                    ultimo_precio_cobrado = 0.0
+                    
+                    if df_historial is not None and cod != "MANUAL" and empresa_cliente:
+                        try:
+                            columnas_h = list(df_historial.columns)
+                            col_h_cli = next((c for c in columnas_h if 'cli' in c.lower() or 'emp' in c.lower() or 'raz' in c.lower() or 'nom' in c.lower()), columnas_h[0])
+                            col_h_cod = next((c for c in columnas_h if 'cod' in c.lower() or 'art' in c.lower() or 'pro' in c.lower()), columnas_h[1] if len(columnas_h) > 1 else columnas_h[0])
+                            col_h_px = next((c for c in columnas_h if 'prec' in c.lower() or 'net' in c.lower() or 'val' in c.lower() or 'vta' in c.lower() or 'tot' in c.lower()), columnas_h[-1])
+                            
+                            term_emp = normalizar_texto(empresa_cliente)
+                            df_h_filtrado = df_historial[df_historial[col_h_cli].astype(str).apply(normalizar_texto).str.contains(term_emp, na=False, regex=False)]
+                            match_hist_prod = df_h_filtrado[df_h_filtrado[col_h_cod].astype(str).str.strip().str.lower() == cod.lower()]
+                            
+                            if not match_hist_prod.empty:
+                                ultimo_precio_cobrado = float(limpiar_precio(match_hist_prod.iloc[-1][col_h_px]))
+                                if ultimo_precio_cobrado > 0:
+                                    precio_historico_encontrado = True
+                        except:
+                            pass
+                    
+                    if precio_historico_encontrado:
+                        px_final_neto = ultimo_precio_cobrado
+                        texto_descuento_col = "Historial ERP"
+                        desc = "✨ [Precio cargado desde Historial ERP] " + desc
+                    else:
+                        px_final_neto = px_lista
+                        texto_descuento_col = "0%"
                     
                 cotizacion_final.append({
                     "Código": cod, "Marca": marca, "Descripción Catálogo": desc, "Cantidad": cant,
