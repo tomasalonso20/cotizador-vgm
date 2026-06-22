@@ -5,6 +5,7 @@ import json
 from PIL import Image
 import unicodedata
 import io
+import os
 
 # Importaciones nativas de openpyxl para diseño y manejo de imágenes
 import openpyxl
@@ -13,7 +14,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Plantilla Exacta)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Imágenes Express)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -55,8 +56,8 @@ def limpiar_precio(valor):
         except:
             return 0.0
 
-# FUNCIÓN: Generación de Excel con Calce Exacto de Celdas y Estilo Corporativo
-def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None):
+# FUNCIÓN: Generación de Excel con Calce Exacto e Inserción de Imágenes Dinámicas
+def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -85,7 +86,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["G1"].font = font_negrita
     ws["G1"].alignment = Alignment(horizontal="right")
     
-    # Soporte e inserción de Logo si existe (Se ubica en A1 sin pisar textos)
+    # Soporte e inserción de Logo Corporativo en A1
     if logo_bytes:
         try:
             img_stream = io.BytesIO(logo_bytes)
@@ -96,7 +97,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         except:
             pass
             
-    # Distribución de Encabezados con Calce Exacto al archivo base
+    # Estructura de Encabezados (Idéntica a prueba IA_2.xlsx)
     ws["A3"] = f"COTIZACIÓN N°{nro_cotiz}"
     ws["A3"].font = font_titulo
     
@@ -115,7 +116,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
     ws["A8"].font = font_normal
     
-    # Estructura de Columnas e Identificación Idéntica al Formato de Origen
+    # Títulos de Columnas Oficiales
     titulos_columnas = ["CODIGO", "MARCA", "DESCRIPCIÓN", "PRECIO UNITARIO NETO", "CANTIDAD", "PRECIO UNITARIO TOTAL", "IMAGEN REFERENCIAL"]
     fila_tabla_inicio = 10
     
@@ -127,10 +128,13 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         celda.border = borde_delgado
     ws.row_dimensions[fila_tabla_inicio].height = 28
     
-    # Volcado dinámico de productos desde el motor RAG
+    # Volcado de productos con inyección de imágenes al vuelo
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
-        ws.cell(row=fila_actual, column=1, value=str(fila["Código"])).alignment = Alignment(horizontal="center", vertical="center")
+        cod_original = str(fila["Código"])
+        cod_limpio = cod_original.strip().lower()
+        
+        ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value="YATO/VOREL").alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=3, value=str(fila["Descripción Catálogo"])).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         
@@ -144,18 +148,28 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
+        # LÓGICA DE LA OPCIÓN C: Insertar la imagen si fue subida en la App
         ws.cell(row=fila_actual, column=7, value="").alignment = Alignment(horizontal="center", vertical="center")
+        if dict_imagenes and cod_limpio in dict_imagenes:
+            try:
+                img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio])
+                img_excel = OpenpyxlImage(img_prod_stream)
+                # Proporciones perfectas para una celda de alto 65pt y ancho 24
+                img_excel.width = 115
+                img_excel.height = 80
+                ws.add_image(img_excel, f"G{fila_actual}")
+            except Exception as e:
+                ws.cell(row=fila_actual, column=7, value="[Error de Imagen]").font = font_normal
         
         for c_idx in range(1, 8):
             celda_f = ws.cell(row=fila_actual, column=c_idx)
             celda_f.font = font_normal
             celda_f.border = borde_delgado
             
-        ws.row_dimensions[fila_actual].height = 65  # Altura optimizada para catálogo visual
+        ws.row_dimensions[fila_actual].height = 65  # Altura de catálogo para que quepa la foto perfectamente
         fila_actual += 1
         
-    # Mapeo y Sincronización Estricta del Cierre y Totales Comerciales
-    # Fila de SUBTOTAL
+    # Cierre de Totales Comerciales
     ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
     
     celda_lbl_sub = ws.cell(row=fila_actual, column=5, value="SUBTOTAL")
@@ -170,7 +184,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     celda_val_sub.border = borde_delgado
     fila_actual += 1
     
-    # Fila de IVA
     celda_lbl_iva = ws.cell(row=fila_actual, column=5, value="IVA")
     celda_lbl_iva.font = font_negrita
     celda_lbl_iva.alignment = Alignment(horizontal="right", vertical="center")
@@ -183,7 +196,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     celda_val_iva.border = borde_delgado
     fila_actual += 1
     
-    # Fila de TOTAL con destaque corporativo
     ws.cell(row=fila_actual, column=1, value="Condiciones de Venta:").font = font_negrita
     
     celda_lbl_tot = ws.cell(row=fila_actual, column=5, value="TOTAL")
@@ -199,7 +211,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     celda_val_tot.border = borde_delgado
     fila_actual += 1
     
-    # Filas de Cláusulas y Firmas en Columna G
     ws.cell(row=fila_actual, column=1, value="1: Plazo de entrega por confirmar").font = font_normal
     fila_actual += 1
     
@@ -215,13 +226,13 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     ws.cell(row=fila_actual, column=1, value="A la espera de sus comentarios, le saluda atentamente :").font = font_normal
     
-    # Ajustes milimétricos de ancho de columna para evitar textos cortados
+    # Ancho exacto de columnas para evitar recortes de texto
     ws.column_dimensions['A'].width = 14
     ws.column_dimensions['B'].width = 14
     ws.column_dimensions['C'].width = 46
-    ws.column_dimensions['D'].width = 24  # Espacio para PRECIO UNITARIO NETO
+    ws.column_dimensions['D'].width = 24  
     ws.column_dimensions['E'].width = 12
-    ws.column_dimensions['F'].width = 24  # Espacio para PRECIO UNITARIO TOTAL
+    ws.column_dimensions['F'].width = 24  
     ws.column_dimensions['G'].width = 24
     
     wb.save(output)
@@ -239,6 +250,15 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("🖼️ Branding & Personalización")
     logo_empresa = st.file_uploader("Sube el Logo de tu Empresa (PNG/JPG)", type=["png", "jpg", "jpeg"])
+    
+    st.markdown("---")
+    st.subheader("📦 Fotos de los Productos")
+    # CARGADOR MÚLTIPLE DE OPCIÓN C:
+    fotos_productos = st.file_uploader(
+        "Sube las fotos de ESTA cotización (Nómbralas con su código, ej: YT09511.jpg)", 
+        type=["png", "jpg", "jpeg"], 
+        accept_multiple_files=True
+    )
     
     st.markdown("---")
     with st.expander("⚙️ Verificación de Columnas Catálogo", expanded=False):
@@ -307,7 +327,8 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response = model.generate_content([prompt_extraccion, imagen_lista])
-            texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
+            texto_limpio = response.text.strip().replace("
+```json", "").replace("```", "")
             
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
@@ -366,7 +387,8 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response_resolucion = model.generate_content(prompt_resolucion)
-            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("```", "")
+            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("
+```", "")
             
             datos_finales = json.loads(texto_resolucion)
             resultados_lista = datos_finales.get("resultados", [])
@@ -420,12 +442,19 @@ if archivo_excel and imagen_pedido and api_key:
                 
                 st.markdown("---")
                 
+                # Procesar diccionario de imágenes de productos subidas en la barra lateral
+                dict_imagenes_procesadas = {}
+                if fotos_productos:
+                    for foto in fotos_productos:
+                        nombre_id = foto.name.split(".")[0].strip().lower()
+                        dict_imagenes_procesadas[nombre_id] = foto.getvalue()
+                
                 # Obtención de bytes de logo si existe
                 logo_data = logo_empresa.getvalue() if logo_empresa else None
                 
                 excel_binario = generar_excel_comercial(
                     df_resultado, nombre_cliente, empresa_cliente, numero_folio, 
-                    total_neto_final, iva_calculado, total_bruto, logo_data
+                    total_neto_final, iva_calculado, total_bruto, logo_data, dict_imagenes_procesadas
                 )
                 
                 st.download_button(
