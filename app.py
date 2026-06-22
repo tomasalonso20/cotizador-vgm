@@ -70,7 +70,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, desc_porcentaje, total_n
     font_normal = Font(name="Arial", size=10)
     font_firma = Font(name="Arial", size=11, bold=True, italic=True)
     
-    # Relleno Azul Corporativo para la cabecera (Match con la imagen de referencia)
+    # Relleno Azul Corporativo para la cabecera
     fill_azul_vgm = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
     
     # Bordes finos elegantes
@@ -121,12 +121,10 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, desc_porcentaje, total_n
     # 6. Volcado de Datos del DataFrame con Formateo Manual de Celdas
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
-        # Valores de texto y enteros
         ws.cell(row=fila_actual, column=1, value=str(fila["Código"])).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value=str(fila["Descripción Catálogo"])).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         ws.cell(row=fila_actual, column=3, value=int(fila["Cantidad"])).alignment = Alignment(horizontal="center", vertical="center")
         
-        # Formateo de Moneda Dinámica CLP ($#,##0)
         c_lista = ws.cell(row=fila_actual, column=4, value=float(fila["Precio Lista (Neto)"]))
         c_lista.number_format = '$#,##0'
         c_lista.alignment = Alignment(horizontal="right", vertical="center")
@@ -141,16 +139,15 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, desc_porcentaje, total_n
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
-        # Aplicación general de fuentes y bordes a la fila de datos
         for c_idx in range(1, 8):
             celda_f = ws.cell(row=fila_actual, column=c_idx)
             celda_f.font = font_normal
             celda_f.border = borde_delgado
             
-        ws.row_dimensions[fila_actual].height = 26  # Altura generosa para descripciones largas
+        ws.row_dimensions[fila_actual].height = 26
         fila_actual += 1
         
-    # 7. Bloque de Valores Totales (Derecha Inferior de la Tabla)
+    # 7. Bloque de Valores Totales
     totales_comerciales = [
         ("SUBTOTAL", total_neto),
         ("IVA (19%)", iva),
@@ -172,9 +169,9 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, desc_porcentaje, total_n
         ws.row_dimensions[fila_actual].height = 20
         fila_actual += 1
         
-    fila_actual += 2  # Separación prudente
+    fila_actual += 2
     
-    # 8. Términos, Condiciones y Notas Legales (Izquierda)
+    # 8. Términos, Condiciones y Notas Legales
     ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
     ws.cell(row=fila_actual+2, column=1, value="Condiciones de Venta:").font = font_negrita
     ws.cell(row=fila_actual+3, column=1, value="1: Plazo de entrega por confirmar").font = font_normal
@@ -182,13 +179,13 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, desc_porcentaje, total_n
     ws.cell(row=fila_actual+5, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
     ws.cell(row=fila_actual+6, column=1, value="A la espera de sus comentarios, le saluda atentamente :").font = font_normal
     
-    # 9. Bloque Digital de Firma Autorizada (Derecha)
+    # 9. Bloque Digital de Firma Autorizada
     ws.cell(row=fila_actual+5, column=7, value="Enrique Hernández P.").font = font_firma
     ws.cell(row=fila_actual+5, column=7).alignment = Alignment(horizontal="right")
     ws.cell(row=fila_actual+6, column=7, value="VGM SpA").font = font_negrita
     ws.cell(row=fila_actual+6, column=7).alignment = Alignment(horizontal="right")
     
-    # 10. Dimensionamiento manual optimizado de columnas para evitar textos cortados
+    # 10. Dimensionamiento manual optimizado de columnas
     ws.column_dimensions['A'].width = 14
     ws.column_dimensions['B'].width = 46
     ws.column_dimensions['C'].width = 12
@@ -206,6 +203,9 @@ with st.sidebar:
     nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej: Claudia Araya")
     empresa_cliente = st.text_input("Empresa / Entidad:", placeholder="Ej: Tattersall")
     descuento_aplicar = st.number_input("Descuento a aplicar (%)", min_value=0, max_value=100, value=0, step=1)
+    
+    # NUEVO CAMPO: Precio Fijo Alternativo en caso de no aplicar % de descuento
+    precio_manual_input = st.text_input("Precio Neto Fijo Alternativo (Opcional):", placeholder="Ej: 500000")
     
     st.markdown("---")
     
@@ -286,6 +286,8 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response = model.generate_content([prompt_extraccion, imagen_lista])
+            
+            # SOLUCIÓN DE REPARACIÓN DE SINTAXIS (Fase 1 Segura):
             texto_limpio = response.text.strip().replace("
 ```json", "").replace("```", "")
             
@@ -400,8 +402,19 @@ if archivo_excel and imagen_pedido and api_key:
                 elif not res.get("coincidencia_exacta", True):
                     desc = f"⚠️ (Match sugerido) {desc}"
                 
-                descuento_unidades = px_lista * (descuento_aplicar / 100)
-                px_final_neto = px_lista - descuento_unidades
+                # NUEVA LÓGICA COMERCIAL: Evaluación de Precio Manual o Descuento General
+                precio_manual_val = limpiar_precio(precio_manual_input)
+                
+                if descuento_aplicar == 0 and precio_manual_val > 0 and cod != "MANUAL":
+                    # Si el usuario ingresó un precio fijo (ej. 500000 para el carro vorel) y el descuento es cero
+                    px_final_neto = precio_manual_val
+                    texto_descuento_col = "Precio Especial"
+                else:
+                    # Cálculo estándar por porcentaje
+                    descuento_unidades = px_lista * (descuento_aplicar / 100)
+                    px_final_neto = px_lista - descuento_unidades
+                    texto_descuento_col = f"{descuento_aplicar}%"
+                    
                 total_item_neto = px_final_neto * cant
                     
                 cotizacion_final.append({
@@ -409,7 +422,7 @@ if archivo_excel and imagen_pedido and api_key:
                     "Descripción Catálogo": desc,
                     "Cantidad": cant,
                     "Precio Lista (Neto)": px_lista,
-                    "Descuento Aplicado": f"{descuento_aplicar}%",
+                    "Descuento Aplicado": texto_descuento_col,
                     "Precio Final (Neto)": px_final_neto,
                     "Total Neto": total_item_neto
                 })
@@ -421,7 +434,7 @@ if archivo_excel and imagen_pedido and api_key:
                 
                 subtotal_lista = (df_resultado["Precio Lista (Neto)"] * df_resultado["Cantidad"]).sum()
                 total_neto_final = df_resultado["Total Neto"].sum()
-                descuento_total_pesos = subtotal_lista - total_neto_final
+                descuento_total_pesos = subtotal_lista - total_neto_final if subtotal_lista >= total_neto_final else 0.0
                 iva_calculado = total_neto_final * 0.19
                 total_bruto = total_neto_final + iva_calculado
                 
@@ -437,7 +450,6 @@ if archivo_excel and imagen_pedido and api_key:
                 st.markdown("---")
                 st.subheader("📥 Descargar Documento Comercial")
                 
-                # Ejecución del formateador avanzado openpyxl
                 excel_binario = generar_excel_comercial(
                     df_resultado, nombre_cliente, empresa_cliente, 
                     descuento_aplicar, total_neto_final, iva_calculado, total_bruto
