@@ -288,8 +288,7 @@ if archivo_excel and imagen_pedido and api_key:
             response = model.generate_content([prompt_extraccion, imagen_lista])
             
             # SOLUCIÓN DE REPARACIÓN DE SINTAXIS (Fase 1 Segura):
-            texto_limpio = response.text.strip().replace("
-```json", "").replace("```", "")
+            texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
             
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
