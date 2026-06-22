@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Servidor Liviano Premium)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Móvil Ultra-Eficiente)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -66,7 +66,6 @@ def leer_csv_tolerante(ruta_archivo):
     for enc in encodings_a_probar:
         for sep in delimitadores_a_probar:
             try:
-                # Escaneamos las primeras 15 líneas para ubicar la cabecera real
                 with open(ruta_archivo, 'r', encoding=enc) as f:
                     lineas = [f.readline() for _ in range(15)]
                 
@@ -77,7 +76,6 @@ def leer_csv_tolerante(ruta_archivo):
                         fila_cabecera_idx = idx
                         break
                 
-                # Leemos el archivo saltándonos los encabezados basura del ERP
                 df_res = pd.read_csv(ruta_archivo, sep=sep, encoding=enc, skiprows=fila_cabecera_idx)
                 df_res = df_res.dropna(how='all', axis=1)
                 df_res = df_res.dropna(how='all', axis=0)
@@ -259,6 +257,14 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     wb.save(output)
     return output.getvalue()
 
+# AUTODETECCIÓN DE LOGO CORPORATIVO EN EL SERVIDOR
+logo_bytes = None
+for ext in ["png", "jpg", "jpeg"]:
+    if os.path.exists(f"logo.{ext}"):
+        with open(f"logo.{ext}", "rb") as f:
+            logo_bytes = f.read()
+        break
+
 # Barra lateral - Interfaz de Usuario
 with st.sidebar:
     st.subheader("💼 Datos de la Cotización")
@@ -270,24 +276,35 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("🖼️ Branding & Personalización")
-    logo_empresa = st.file_uploader("Sube el Logo de tu Empresa (PNG/JPG)", type=["png", "jpg", "jpeg"])
+    if logo_bytes:
+        st.success("✅ Logo de la empresa cargado desde GitHub.")
+        logo_empresa = st.file_uploader("Reemplazar logo actual (Opcional)", type=["png", "jpg", "jpeg"])
+    else:
+        st.warning("⚠️ Sin logo guardado en el servidor.")
+        logo_empresa = st.file_uploader("Sube el Logo de tu Empresa (PNG/JPG)", type=["png", "jpg", "jpeg"])
     
     st.markdown("---")
     st.subheader("📦 Fotos de los Productos")
     fotos_productos = st.file_uploader(
-        "Sube las fotos de ESTA cotización (Nómbralas con su código, ej: YT09511.jpg)", 
+        "Sube las fotos de ESTA cotización (Nómbrar las fotos con su código, ej: YT09511.jpg)", 
         type=["png", "jpg", "jpeg"], 
         accept_multiple_files=True
     )
     
     st.markdown("---")
-    with st.expander("⚙️ Autenticación de Motor", expanded=False):
-        api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
+    # MOTOR DE SEGURIDAD: INTENTA LEER LA LLAVE AUTOMÁTICAMENTE DE STREAMLIT SECRETS
+    api_key = None
+    if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"].strip():
+        api_key = st.secrets["GEMINI_API_KEY"]
+        st.success("🔑 Motor Gemini autenticado de forma permanente.")
+    else:
+        with st.expander("⚙️ Autenticación de Motor (Requerido)", expanded=True):
+            api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
 
 st.subheader("1. Sube el pantallazo de la solicitud del cliente")
 imagen_pedido = st.file_uploader("Selecciona la imagen del pedido o correo", type=["png", "jpg", "jpeg"])
 
-# INTRODUCCIÓN DEL ESCÁNER DE CABECERAS PARA EL CATÁLOGO VIGENTE
+# MOTOR DE CARGA: LECTURA DEL CATÁLOGO BASE VIGENTE
 df_catalogo = leer_csv_tolerante("lista_vigente.csv")
 
 if df_catalogo is not None:
@@ -296,7 +313,7 @@ else:
     st.error("❌ No se encontró o no se pudo mapear 'lista_vigente.csv' en GitHub. Por favor súbelo para activar la app.")
     st.stop()
 
-# INTRODUCCIÓN DEL ESCÁNER DE CABECERAS PARA EL HISTORIAL DE VENTAS ERP
+# MOTOR DE CARGA: LECTURA INTELIGENTE DEL CEREBRO HISTÓRICO DE VENTAS (2025-2026)
 df_historial = leer_csv_tolerante("historial_ventas.csv")
 
 if df_historial is not None:
@@ -460,7 +477,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 if cod.upper() == "L-HEAD-1" or "HEAD" in desc.upper() or "CABEZA" in desc.upper():
                     marca = "IRIMO"
                 
-                # AUDITORÍA DE PRECIOS MEDIANTE EL CEREBRO DE VENTAS DEL ERP
+                # AUDITORÍA MEDIANTE EL CEREBRO HISTÓRICO DE VENTAS
                 if df_historial is not None and cod != "MANUAL" and empresa_cliente:
                     try:
                         columnas_h = list(df_historial.columns)
@@ -526,7 +543,8 @@ if df_catalogo is not None and imagen_pedido and api_key:
                         nombre_id = os.path.splitext(foto.name)[0].strip().lower()
                         dict_imagenes_procesadas[nombre_id] = foto.getvalue()
                 
-                logo_data = logo_empresa.getvalue() if logo_empresa else None
+                # Priorizar logo subido manualmente, si no, usar el logo automático de GitHub
+                logo_data = logo_empresa.getvalue() if logo_empresa else logo_bytes
                 
                 excel_binario = generar_excel_comercial(
                     df_resultado, nombre_cliente, empresa_cliente, numero_folio, 
@@ -545,4 +563,4 @@ if df_catalogo is not None and imagen_pedido and api_key:
         except Exception as e:
             st.error(f"Error en el motor de automatización: {e}")
 else:
-    st.info("Por favor ingresa tu Gemini API Key y carga el pantallazo para operar.")
+    st.info("Por favor carga el pantallazo del pedido para operar.")
