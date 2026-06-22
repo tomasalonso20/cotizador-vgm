@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Inteligente Premium)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Móvil Ultra-Eficiente)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -38,23 +38,26 @@ def limpiar_plurales(texto):
             limpias.append(p)
     return " ".join(limpias)
 
+# LIMPIADOR MEJORADO: Formatea a números enteros limpios sin decimales molestos
 def limpiar_precio(valor):
     if pd.isna(valor):
         return 0.0
+    if isinstance(valor, (int, float)):
+        return float(int(valor))
     val_str = str(valor).strip().replace("$", "").replace(" ", "")
     if not val_str:
         return 0.0
+    # Cortar decimales de centavos comunes en exportaciones (,00 o .00)
+    if "," in val_str and val_str.count(",") == 1 and len(val_str.split(",")[-1]) <= 2:
+        val_str = val_str.split(",")[0]
+    if "." in val_str and val_str.count(".") == 1 and len(val_str.split(".")[-1]) <= 2:
+        val_str = val_str.split(".")[0]
+    # Remover separadores de miles restantes
+    val_str = val_str.replace(".", "").replace(",", "")
     try:
-        return float(val_str)
-    except ValueError:
-        if "," in val_str:
-            val_str = val_str.replace(".", "").replace(",", ".")
-        else:
-            val_str = val_str.replace(".", "")
-        try:
-            return float(val_str)
-        except:
-            return 0.0
+        return float(int(val_str))
+    except:
+        return 0.0
 
 # FUNCIÓN MAESTRA BLINDADA: Valida que existan al menos 2 columnas reales para evitar falsos positivos con títulos
 def leer_csv_tolerante(ruta_archivo):
@@ -72,9 +75,8 @@ def leer_csv_tolerante(ruta_archivo):
                 fila_cabecera_idx = 0
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
-                    # Corregido NameError: Buscamos palabras clave reales de columnas comerciales
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if coincidencias >= 2:
+                    if modificaciones := coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -88,7 +90,7 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN: Generación de Excel con Calce Exacto e Inserción de Imágenes Dinámicas
+# FUNCIÓN: Generación de Excel Comercial Oficial
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -161,7 +163,10 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         
         ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=fila_actual, column=3, value=str(fila["Descripción Catálogo"])).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        
+        # Limpiar prefijos de diagnóstico para que el Excel oficial vaya impecable
+        desc_excel = str(fila["Descripción Catálogo"]).replace("✨ [Historial] ", "").replace("⚠️ (Match sugerido) ", "")
+        ws.cell(row=fila_actual, column=3, value=desc_excel).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         
         c_neto = ws.cell(row=fila_actual, column=4, value=float(fila["Precio Final (Neto)"]))
         c_neto.number_format = '$#,##0'
@@ -487,7 +492,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 elif not res.get("coincidencia_exacta", True):
                     desc = f"⚠️ (Match sugerido) {desc}"
                 
-                # CÁLCULO INTELIGENTE SEGÚN LA NUEVA JERARQUÍA COMERCIAL SOLICITADA
+                # JERARQUÍA COMERCIAL OPTIMIZADA
                 precio_manual_val = limpiar_precio(precio_manual_input)
                 
                 if precio_manual_val > 0:
@@ -497,7 +502,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
                     px_final_neto = px_lista - (px_lista * (descuento_aplicar / 100))
                     texto_descuento_col = f"{descuento_aplicar}%"
                 else:
-                    # Si el descuento y precio especial están en blanco (0), viajamos al Historial de Ventas
+                    # Modo manos libres: si no hay descuento ni precio especial, busca historial previo
                     precio_historico_encontrado = False
                     ultimo_precio_cobrado = 0.0
                     
@@ -522,7 +527,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
                     if precio_historico_encontrado:
                         px_final_neto = ultimo_precio_cobrado
                         texto_descuento_col = "Historial ERP"
-                        desc = "✨ [Precio cargado desde Historial ERP] " + desc
+                        desc = "✨ [Historial] " + desc
                     else:
                         px_final_neto = px_lista
                         texto_descuento_col = "0%"
@@ -536,7 +541,21 @@ if df_catalogo is not None and imagen_pedido and api_key:
             if cotizacion_final:
                 df_resultado = pd.DataFrame(cotizacion_final)
                 st.success("¡Cotización construida exitosamente!")
-                st.dataframe(df_resultado, use_container_width=True)
+                
+                # VISTA PREMIUM OPTIMIZADA PARA PANTALLAZOS EN EL CELULAR
+                st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
+                
+                # Aplicamos formateo de moneda sin decimales (.0) y con separadores limpios
+                df_formateado = df_resultado.copy()
+                st.dataframe(
+                    df_formateado.style.format({
+                        "Precio Lista (Neto)": "${:,.0f}",
+                        "Precio Final (Neto)": "${:,.0f}",
+                        "Total Neto": "${:,.0f}",
+                        "Cantidad": "{:,.0f}"
+                    }),
+                    use_container_width=True
+                )
                 
                 subtotal_lista = (df_resultado["Precio Lista (Neto)"] * df_resultado["Cantidad"]).sum()
                 total_neto_final = df_resultado["Total Neto"].sum()
