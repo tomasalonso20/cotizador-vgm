@@ -113,7 +113,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"
     ws["A7"].font = font_negrita
     
-    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
+    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra proposal:"
     ws["A8"].font = font_normal
     
     # Títulos de Columnas Oficiales
@@ -266,20 +266,37 @@ with st.sidebar:
 st.subheader("1. Sube el pantallazo de la solicitud del cliente")
 imagen_pedido = st.file_uploader("Selecciona la imagen del pedido o correo", type=["png", "jpg", "jpeg"])
 
-# MOTOR DE CARGA DEL CATÁLOGO DESDE EL SERVIDOR (Cambio de Excel a tu nuevo CSV)
+# MOTOR DE CARGA INTELIGENTE Y TOLERANTE A CSV LATINOAMERICANOS
 RUTA_CATALOGO = "lista_vigente.csv"
 df_catalogo = None
 
 if os.path.exists(RUTA_CATALOGO):
-    try:
-        # Intentamos con punto y coma (común en Excel de Latinoamérica)
-        df_catalogo = pd.read_csv(RUTA_CATALOGO, sep=";")
-        if df_catalogo.shape[1] <= 1:
-            df_catalogo = pd.read_csv(RUTA_CATALOGO, sep=",")
+    encodings_a_probar = ['utf-8', 'latin1', 'iso-8859-1', 'utf-8-sig', 'cp1252']
+    delimitadores_a_probar = [';', ',']
+    exito_lectura = False
+    
+    for enc in encodings_a_probar:
+        for sep in delimitadores_a_probar:
+            try:
+                df_test = pd.read_csv(RUTA_CATALOGO, sep=sep, encoding=enc)
+                if df_test.shape[1] > 1:
+                    df_catalogo = df_test
+                    exito_lectura = True
+                    break
+            except:
+                continue
+        if exito_lectura:
+            break
+            
+    if exito_lectura and df_catalogo is not None:
         st.success(f"✅ Cerebro comercial '{RUTA_CATALOGO}' cargado dinámicamente desde el servidor.")
-    except Exception as e:
-        st.error(f"❌ Error crítico leyendo la lista CSV: {e}")
-        st.stop()
+    else:
+        try:
+            df_catalogo = pd.read_csv(RUTA_CATALOGO, sep=None, engine='python')
+            st.success(f"✅ Cerebro comercial '{RUTA_CATALOGO}' cargado con motor alternativo.")
+        except Exception as e:
+            st.error(f"❌ Error crítico leyendo la lista CSV: {e}")
+            st.stop()
 else:
     st.error(f"❌ No se encontró el archivo '{RUTA_CATALOGO}' en GitHub. Por favor, súbelo para activar la app.")
     st.stop()
@@ -293,9 +310,20 @@ if df_catalogo is not None and imagen_pedido and api_key:
             
             st.info("🔄 Fase 1: Leyendo imagen de solicitud e interpretando requerimientos...")
             df = df_catalogo.copy()
+            
+            # Limpieza dinámica de cabeceras por si quedaron filas de títulos vacías arriba en el CSV
+            columnas_limpias = [str(c).strip() for c in df.columns]
+            if not any('cod' in c.lower() or 'desc' in c.lower() or 'prec' in c.lower() for c in columnas_limpias):
+                for i in range(min(5, len(df))):
+                    fila_valores = [str(v).strip() for v in df.iloc[i].values]
+                    if any('cod' in f.lower() or 'desc' in f.lower() or 'prec' in f.lower() for f in fila_valores):
+                        df.columns = fila_valores
+                        df = df.iloc[i+1:].reset_index(drop=True)
+                        break
+            
             df.columns = [str(c).strip() for c in df.columns]
             
-            # Autodetección milimétrica de las columnas del CSV histórico
+            # Autodetección milimétrica de las columnas mapeadas
             columnas_disponibles = list(df.columns)
             idx_cod = next((i for i, c in enumerate(columnas_disponibles) if 'cod' in c.lower() or 'id' in c.lower()), 0)
             idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 1)
@@ -423,7 +451,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 px_lista = float(res.get("precio_elegido", 0.0))
                 marca = "YATO/VOREL"
                 
-                # CRUCE DE DATOS DESDE EL MODELO LOCAL (Cerebro CSV)
+                # CRUCE DE DATOS EN TIEMPO REAL DESDE TU CSV LOCAL
                 if cod != "MANUAL":
                     cod_norm = normalizar_texto(cod)
                     match_rows = df[df['__cod_clean'] == cod_norm]
