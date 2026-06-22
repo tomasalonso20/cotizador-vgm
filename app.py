@@ -13,7 +13,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Excel Premium)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Plantilla Exacta)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -55,79 +55,69 @@ def limpiar_precio(valor):
         except:
             return 0.0
 
-# FUNCIÓN: Generación de Excel con Estilo de Catálogo Corporativo e Imagen de Logo
+# FUNCIÓN: Generación de Excel con Calce Exacto de Celdas y Estilo Corporativo
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Cotización VGM"
+    ws.title = "Cotización"
     
     # Asegurar líneas de cuadrícula visibles
     ws.views.sheetView[0].showGridLines = True
     
-    # Tipografías y Colores Corporativos
-    font_titulo_central = Font(name="Arial", size=14, bold=True, underline="single", color="1F497D")
+    # Estilos de Tipografía y Colores Corporativos
+    font_titulo = Font(name="Arial", size=12, bold=True, color="1F497D")
     font_cabecera_tabla = Font(name="Arial", size=10, bold=True, color="FFFFFF")
     font_negrita = Font(name="Arial", size=10, bold=True)
     font_normal = Font(name="Arial", size=10)
     font_firma = Font(name="Arial", size=11, bold=True, italic=True)
     
     fill_azul_header = PatternFill(start_color="365F91", end_color="365F91", fill_type="solid")
-    fill_totales_destaque = PatternFill(start_color="E9EDF4", end_color="E9EDF4", fill_type="solid")
+    fill_totales = PatternFill(start_color="E9EDF4", end_color="E9EDF4", fill_type="solid")
     
     borde_delgado = Border(
         left=Side(style='thin', color='BFBFBF'), right=Side(style='thin', color='BFBFBF'),
         top=Side(style='thin', color='BFBFBF'), bottom=Side(style='thin', color='BFBFBF')
     )
     
-    # Manejo dinámico del Logo Corporativo
-    if logo_bytes:
-        try:
-            img_stream = io.BytesIO(logo_bytes)
-            img = OpenpyxlImage(img_stream)
-            # Redimensionar proporcionalmente para el encabezado (ej: 140x55 px)
-            img.width = 140
-            img.height = 55
-            ws.add_image(img, 'A1')
-            ws.row_dimensions[1].height = 20
-            ws.row_dimensions[2].height = 20
-            ws.row_dimensions[3].height = 20
-        except Exception as e:
-            ws["A1"] = "VGM SpA"
-    else:
-        ws["A1"] = "VGM SpA"
-        ws["A1"].font = Font(name="Arial", size=14, bold=True, color="1F497D")
-
-    # Datos fijos de la empresa (Columna B si hay logo para que no se encima)
-    col_datos = "B" if logo_bytes else "A"
-    ws[f"{col_datos}1"] = "VGM SpA"
-    ws[f"{col_datos}1"].font = Font(name="Arial", size=11, bold=True)
-    ws[f"{col_datos}2"] = "RUT: 76.834.968-1"
-    ws[f"{col_datos}2"].font = font_negrita
-    ws[f"{col_datos}3"] = "Chopin 2848, San Joaquín, Santiago"
-    ws[f"{col_datos}3"].font = font_normal
-    
-    # Fecha de Emisión (Derecha)
+    # Fila 1: Fecha de emisión alineada a la derecha en columna G
     ws["G1"] = f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}"
     ws["G1"].font = font_negrita
     ws["G1"].alignment = Alignment(horizontal="right")
     
-    # Folio de Cotización Central
-    ws["C5"] = f"COTIZACIÓN COMERCIAL N° {nro_cotiz}"
-    ws["C5"].font = font_titulo_central
-    ws["C5"].alignment = Alignment(horizontal="center", vertical="center")
+    # Soporte e inserción de Logo si existe (Se ubica en A1 sin pisar textos)
+    if logo_bytes:
+        try:
+            img_stream = io.BytesIO(logo_bytes)
+            img = OpenpyxlImage(img_stream)
+            img.width = 130
+            img.height = 50
+            ws.add_image(img, 'A1')
+        except:
+            pass
+            
+    # Distribución de Encabezados con Calce Exacto al archivo base
+    ws["A3"] = f"COTIZACIÓN N°{nro_cotiz}"
+    ws["A3"].font = font_titulo
     
-    # Datos del Cliente Receptor
-    ws["A7"] = f"Sr(a).: {cliente if cliente else 'No especificado'}"
+    ws["A4"] = "76.834.968-1"
+    ws["A4"].font = font_negrita
+    
+    ws["A5"] = "Chopin 2848. San Joaquín. Santiago"
+    ws["A5"].font = font_normal
+    
+    ws["A6"] = f"Sr(a).: {cliente if cliente else 'No especificado'}"
+    ws["A6"].font = font_negrita
+    
+    ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"
     ws["A7"].font = font_negrita
-    ws["A8"] = f"Empresa: {empresa if empresa else 'No especificada'}"
-    ws["A8"].font = font_negrita
-    ws["A9"] = "En atención a su gentil solicitud, presentamos nuestra propuesta económica para las herramientas solicitadas:"
-    ws["A9"].font = font_normal
     
-    # Estructura de Columnas de Catálogo
-    titulos_columnas = ["CÓDIGO", "MARCA", "DESCRIPCIÓN", "PRECIO NETO", "CANTIDAD", "TOTAL NETO", "IMAGEN REFERENCIAL"]
-    fila_tabla_inicio = 12
+    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
+    ws["A8"].font = font_normal
+    
+    # Estructura de Columnas e Identificación Idéntica al Formato de Origen
+    titulos_columnas = ["CODIGO", "MARCA", "DESCRIPCIÓN", "PRECIO UNITARIO NETO", "CANTIDAD", "PRECIO UNITARIO TOTAL", "IMAGEN REFERENCIAL"]
+    fila_tabla_inicio = 10
     
     for col_idx, texto_col in enumerate(titulos_columnas, 1):
         celda = ws.cell(row=fila_tabla_inicio, column=col_idx, value=texto_col)
@@ -135,10 +125,9 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         celda.fill = fill_azul_header
         celda.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         celda.border = borde_delgado
-        
     ws.row_dimensions[fila_tabla_inicio].height = 28
     
-    # Volcado de productos con celdas altas para fotos
+    # Volcado dinámico de productos desde el motor RAG
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
         ws.cell(row=fila_actual, column=1, value=str(fila["Código"])).alignment = Alignment(horizontal="center", vertical="center")
@@ -155,7 +144,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
-        # Celda de Imagen vacía y lista para pegar o insertar
         ws.cell(row=fila_actual, column=7, value="").alignment = Alignment(horizontal="center", vertical="center")
         
         for c_idx in range(1, 8):
@@ -163,45 +151,77 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
             celda_f.font = font_normal
             celda_f.border = borde_delgado
             
-        ws.row_dimensions[fila_actual].height = 65  # Altura perfecta para vista de catálogo
+        ws.row_dimensions[fila_actual].height = 65  # Altura optimizada para catálogo visual
         fila_actual += 1
         
-    # Tabla de Cierre y Totales
-    totales_comerciales = [("SUBTOTAL", total_neto), ("IVA (19%)", iva), ("TOTAL BRUTO", total_bruto)]
-    for etiqueta, valor in totales_comerciales:
-        celda_lbl = ws.cell(row=fila_actual, column=5, value=etiqueta)
-        celda_lbl.font = font_negrita
-        celda_lbl.alignment = Alignment(horizontal="right", vertical="center")
-        celda_lbl.border = borde_delgado
-        
-        celda_val = ws.cell(row=fila_actual, column=6, value=valor)
-        celda_val.font = font_negrita
-        celda_val.fill = fill_totales_destaque if "BRUTO" in etiqueta else PatternFill(fill_type=None)
-        celda_val.number_format = '$#,##0'
-        celda_val.alignment = Alignment(horizontal="right", vertical="center")
-        celda_val.border = borde_delgado
-        ws.row_dimensions[fila_actual].height = 22
-        fila_actual += 1
-        
-    fila_actual += 1
+    # Mapeo y Sincronización Estricta del Cierre y Totales Comerciales
+    # Fila de SUBTOTAL
     ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
-    ws.cell(row=fila_actual+1, column=1, value="Condiciones de Venta:").font = font_negrita
-    ws.cell(row=fila_actual+2, column=1, value="1: Plazo de entrega por confirmar").font = font_normal
-    ws.cell(row=fila_actual+3, column=1, value="2: Validez de cotización: 7 días").font = font_normal
-    ws.cell(row=fila_actual+4, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
     
-    ws.cell(row=fila_actual+3, column=6, value="Enrique Hernández P.").font = font_firma
-    ws.cell(row=fila_actual+3, column=6).alignment = Alignment(horizontal="right")
-    ws.cell(row=fila_actual+4, column=6, value="VGM SpA").font = font_negrita
-    ws.cell(row=fila_actual+4, column=6).alignment = Alignment(horizontal="right")
+    celda_lbl_sub = ws.cell(row=fila_actual, column=5, value="SUBTOTAL")
+    celda_lbl_sub.font = font_negrita
+    celda_lbl_sub.alignment = Alignment(horizontal="right", vertical="center")
+    celda_lbl_sub.border = borde_delgado
     
-    # Ajustes finos de ancho de columnas
+    celda_val_sub = ws.cell(row=fila_actual, column=6, value=total_neto)
+    celda_val_sub.font = font_negrita
+    celda_val_sub.number_format = '$#,##0'
+    celda_val_sub.alignment = Alignment(horizontal="right", vertical="center")
+    celda_val_sub.border = borde_delgado
+    fila_actual += 1
+    
+    # Fila de IVA
+    celda_lbl_iva = ws.cell(row=fila_actual, column=5, value="IVA")
+    celda_lbl_iva.font = font_negrita
+    celda_lbl_iva.alignment = Alignment(horizontal="right", vertical="center")
+    celda_lbl_iva.border = borde_delgado
+    
+    celda_val_iva = ws.cell(row=fila_actual, column=6, value=iva)
+    celda_val_iva.font = font_negrita
+    celda_val_iva.number_format = '$#,##0'
+    celda_val_iva.alignment = Alignment(horizontal="right", vertical="center")
+    celda_val_iva.border = borde_delgado
+    fila_actual += 1
+    
+    # Fila de TOTAL con destaque corporativo
+    ws.cell(row=fila_actual, column=1, value="Condiciones de Venta:").font = font_negrita
+    
+    celda_lbl_tot = ws.cell(row=fila_actual, column=5, value="TOTAL")
+    celda_lbl_tot.font = font_negrita
+    celda_lbl_tot.alignment = Alignment(horizontal="right", vertical="center")
+    celda_lbl_tot.border = borde_delgado
+    
+    celda_val_tot = ws.cell(row=fila_actual, column=6, value=total_bruto)
+    celda_val_tot.font = font_negrita
+    celda_val_tot.fill = fill_totales
+    celda_val_tot.number_format = '$#,##0'
+    celda_val_tot.alignment = Alignment(horizontal="right", vertical="center")
+    celda_val_tot.border = borde_delgado
+    fila_actual += 1
+    
+    # Filas de Cláusulas y Firmas en Columna G
+    ws.cell(row=fila_actual, column=1, value="1: Plazo de entrega por confirmar").font = font_normal
+    fila_actual += 1
+    
+    ws.cell(row=fila_actual, column=1, value="2. Validez de cotización: 7 días").font = font_normal
+    ws.cell(row=fila_actual, column=7, value="Enrique Hernández P.").font = font_firma
+    ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
+    fila_actual += 1
+    
+    ws.cell(row=fila_actual, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
+    ws.cell(row=fila_actual, column=7, value="VGM SpA").font = font_negrita
+    ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
+    fila_actual += 1
+    
+    ws.cell(row=fila_actual, column=1, value="A la espera de sus comentarios, le saluda atentamente :").font = font_normal
+    
+    # Ajustes milimétricos de ancho de columna para evitar textos cortados
     ws.column_dimensions['A'].width = 14
     ws.column_dimensions['B'].width = 14
-    ws.column_dimensions['C'].width = 45
-    ws.column_dimensions['D'].width = 16
-    ws.column_dimensions['E'].width = 11
-    ws.column_dimensions['F'].width = 18
+    ws.column_dimensions['C'].width = 46
+    ws.column_dimensions['D'].width = 24  # Espacio para PRECIO UNITARIO NETO
+    ws.column_dimensions['E'].width = 12
+    ws.column_dimensions['F'].width = 24  # Espacio para PRECIO UNITARIO TOTAL
     ws.column_dimensions['G'].width = 24
     
     wb.save(output)
