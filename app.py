@@ -135,7 +135,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         cod_limpio = cod_original.strip().lower()
         
         ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
-        # CORRECCIÓN: Ahora usa la marca dinámica entregada por el DataFrame en lugar de dejarla fija
         ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=3, value=str(fila["Descripción Catálogo"])).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         
@@ -219,7 +218,8 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     fila_actual += 1
     
-    ws.cell(row=fila_actual, column=1, value="Conditions de Pago: CONTADO").font = font_negrita
+    # CORREGIDO: "Condiciones" en español impecable
+    ws.cell(row=fila_actual, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
     ws.cell(row=fila_actual, column=7, value="VGM SpA").font = font_negrita
     ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     fila_actual += 1
@@ -326,8 +326,7 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response = model.generate_content([prompt_extraccion, imagen_lista])
-            texto_limpio = response.text.strip().replace("
-```json", "").replace("```", "")
+            texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
             
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
@@ -387,8 +386,7 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response_resolucion = model.generate_content(prompt_resolucion)
-            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("
-```", "")
+            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("```", "")
             
             datos_finales = json.loads(texto_resolucion)
             resultados_lista = datos_finales.get("resultados", [])
@@ -399,7 +397,7 @@ if archivo_excel and imagen_pedido and api_key:
                 cant_val = cantidades_dict.get(origen, 1)
                 cant = int(cant_val) if cant_val is not None else 1
                 px_lista = float(res.get("precio_elegido", 0.0))
-                desc = res.get("descripcion_elegida", "❌ NO ENCONTRADO")
+                desc = str(res.get("descripcion_elegida", "❌ NO ENCONTRADO"))
                 cod = res.get("codigo_elegido", "MANUAL")
                 marca = str(res.get("marca_elegida", "YATO/VOREL")).strip().upper()
                 
