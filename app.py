@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Cerebro Comercial Integrado)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Servidor Liviano Premium)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -55,6 +55,38 @@ def limpiar_precio(valor):
             return float(val_str)
         except:
             return 0.0
+
+# FUNCIÓN MAESTRA: Escanea y detecta la cabecera real saltándose filas vacías o títulos del ERP
+def leer_csv_tolerante(ruta_archivo):
+    if not os.path.exists(ruta_archivo):
+        return None
+    encodings_a_probar = ['utf-8', 'latin1', 'iso-8859-1', 'utf-8-sig', 'cp1252']
+    delimitadores_a_probar = [';', ',']
+    
+    for enc in encodings_a_probar:
+        for sep in delimitadores_a_probar:
+            try:
+                # Escaneamos las primeras 15 líneas para ubicar la cabecera real
+                with open(ruta_archivo, 'r', encoding=enc) as f:
+                    lineas = [f.readline() for _ in range(15)]
+                
+                fila_cabecera_idx = 0
+                for idx, line in enumerate(lineas):
+                    line_low = line.lower()
+                    if 'cod' in line_low or 'desc' in line_low or 'prec' in line_low or 'art' in line_low:
+                        fila_cabecera_idx = idx
+                        break
+                
+                # Leemos el archivo saltándonos los encabezados basura del ERP
+                df_res = pd.read_csv(ruta_archivo, sep=sep, encoding=enc, skiprows=fila_cabecera_idx)
+                df_res = df_res.dropna(how='all', axis=1)
+                df_res = df_res.dropna(how='all', axis=0)
+                
+                if df_res.shape[1] >= 2:
+                    return df_res
+            except:
+                continue
+    return None
 
 # FUNCIÓN: Generación de Excel con Calce Exacto e Inserción de Imágenes Dinámicas
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None):
@@ -231,8 +263,8 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
 with st.sidebar:
     st.subheader("💼 Datos de la Cotización")
     nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej: Claudia Araya")
-    empresa_cliente = st.text_input("Empresa / Entidad:", placeholder="Ej: Tattersall")
-    numero_folio = st.text_input("Número de Cotización:", value="EHP-SKC-5299")
+    empresa_cliente = st.text_input("Empresa / Entidad:", placeholder="Ej: Transporte Santa Alberta")
+    numero_folio = st.text_input("Número de Cotización:", value="EHP-TSA-2026")
     descuento_aplicar = st.number_input("Descuento a aplicar (%)", min_value=0, max_value=100, value=0, step=1)
     precio_manual_input = st.text_input("Precio Neto Fijo Alternativo (Opcional):", placeholder="Ej: 500000")
     
@@ -255,56 +287,22 @@ with st.sidebar:
 st.subheader("1. Sube el pantallazo de la solicitud del cliente")
 imagen_pedido = st.file_uploader("Selecciona la imagen del pedido o correo", type=["png", "jpg", "jpeg"])
 
-# MOTOR DE CARGA: LECTURA DEL CATÁLOGO BASE VIGENTE
-RUTA_CATALOGO = "lista_vigente.csv"
-df_catalogo = None
+# INTRODUCCIÓN DEL ESCÁNER DE CABECERAS PARA EL CATÁLOGO VIGENTE
+df_catalogo = leer_csv_tolerante("lista_vigente.csv")
 
-if os.path.exists(RUTA_CATALOGO):
-    encodings_a_probar = ['utf-8', 'latin1', 'iso-8859-1', 'utf-8-sig', 'cp1252']
-    delimitadores_a_probar = [';', ',']
-    exito_lectura = False
-    for enc in encodings_a_probar:
-        for sep in delimitadores_a_probar:
-            try:
-                df_test = pd.read_csv(RUTA_CATALOGO, sep=sep, encoding=enc)
-                if df_test.shape[1] > 1:
-                    df_catalogo = df_test
-                    exito_lectura = True
-                    break
-            except:
-                continue
-        if exito_lectura: break
-            
-    if exito_lectura and df_catalogo is not None:
-        st.success(f"✅ Cerebro comercial '{RUTA_CATALOGO}' cargado dinámicamente.")
-    else:
-        st.error(f"❌ Problema crítico al procesar la estructura de '{RUTA_CATALOGO}'.")
-        st.stop()
+if df_catalogo is not None:
+    st.success("✅ Cerebro comercial 'lista_vigente.csv' conectado y estructurado con éxito.")
 else:
-    st.error(f"❌ Falta el archivo '{RUTA_CATALOGO}' en GitHub.")
+    st.error("❌ No se encontró o no se pudo mapear 'lista_vigente.csv' en GitHub. Por favor súbelo para activar la app.")
     st.stop()
 
-# MOTOR DE CARGA: LECTURA INTELIGENTE DEL CEREBRO HISTÓRICO DE VENTAS (2025-2026)
-RUTA_HISTORIAL = "historial_ventas.csv"
-df_historial = None
+# INTRODUCCIÓN DEL ESCÁNER DE CABECERAS PARA EL HISTORIAL DE VENTAS ERP
+df_historial = leer_csv_tolerante("historial_ventas.csv")
 
-if os.path.exists(RUTA_HISTORIAL):
-    exito_historial = False
-    for enc in ['utf-8', 'latin1', 'iso-8859-1', 'cp1252']:
-        for sep in [';', ',']:
-            try:
-                df_hist_test = pd.read_csv(RUTA_HISTORIAL, sep=sep, encoding=enc)
-                if df_hist_test.shape[1] > 1:
-                    df_historial = df_hist_test
-                    exito_historial = True
-                    break
-            except:
-                continue
-        if exito_historial: break
-    if exito_historial:
-        st.info("🧠 Cerebro Histórico (Ventas 2025-2026) conectado y listo para asistir en precios.")
+if df_historial is not None:
+    st.info("🧠 Cerebro Histórico (ERP Ventas) conectado. El sistema auditará precios anteriores automáticamente.")
 else:
-    st.warning("⚠️ Historial 'historial_ventas.csv' no detectado. El sistema operará sin asistencia histórica.")
+    st.warning("⚠️ Historial 'historial_ventas.csv' no detectado en el servidor. Operando en modo catálogo estándar.")
 
 # Procesamiento Inteligente
 if df_catalogo is not None and imagen_pedido and api_key:
@@ -317,22 +315,12 @@ if df_catalogo is not None and imagen_pedido and api_key:
             df = df_catalogo.copy()
             df.columns = [str(c).strip() for c in df.columns]
             
-            # Limpieza dinámica de cabeceras redundantes
-            columnas_limpias = [str(c).strip() for c in df.columns]
-            if not any('cod' in c.lower() or 'desc' in c.lower() or 'prec' in c.lower() for c in columnas_limpias):
-                for i in range(min(5, len(df))):
-                    fila_valores = [str(v).strip() for v in df.iloc[i].values]
-                    if any('cod' in f.lower() or 'desc' in f.lower() or 'prec' in f.lower() for f in fila_valores):
-                        df.columns = fila_valores
-                        df = df.iloc[i+1:].reset_index(drop=True)
-                        break
-            
-            df.columns = [str(c).strip() for c in df.columns]
             columnas_disponibles = list(df.columns)
+            n_cols = len(columnas_disponibles)
             
             idx_cod = next((i for i, c in enumerate(columnas_disponibles) if 'cod' in c.lower() or 'id' in c.lower()), 0)
-            idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 1)
-            idx_precio = next((i for i, c in enumerate(columnas_disponibles) if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), len(columnas_disponibles) - 1)
+            idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 0 if n_cols == 1 else 1)
+            idx_precio = next((i for i, c in enumerate(columnas_disponibles) if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), n_cols - 1)
             idx_marca = next((i for i, c in enumerate(columnas_disponibles) if 'mar' in c.lower() or 'bra' in c.lower() or 'fab' in c.lower()), -1)
             
             col_codigo = columnas_disponibles[idx_cod]
@@ -472,24 +460,21 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 if cod.upper() == "L-HEAD-1" or "HEAD" in desc.upper() or "CABEZA" in desc.upper():
                     marca = "IRIMO"
                 
-                # INTEGRACIÓN DEL CEREBRO DE VENTAS: Validación por cliente histórico
+                # AUDITORÍA DE PRECIOS MEDIANTE EL CEREBRO DE VENTAS DEL ERP
                 if df_historial is not None and cod != "MANUAL" and empresa_cliente:
                     try:
-                        # Buscamos columnas del historial que se asimilen a Cliente y Código
-                        col_h_cli = next((c for c in df_historial.columns if 'cli' in c.lower() or 'emp' in c.lower() or 'raz' in c.lower()), df_historial.columns[0])
-                        col_h_cod = next((c for c in df_historial.columns if 'cod' in c.lower() or 'art' in c.lower() or 'pro' in c.lower()), df_historial.columns[1])
-                        col_h_px = next((c for c in df_historial.columns if 'prec' in c.lower() or 'net' in c.lower() or 'val' in c.lower() or 'vta' in c.lower()), df_historial.columns[-1])
+                        columnas_h = list(df_historial.columns)
+                        col_h_cli = next((c for c in columnas_h if 'cli' in c.lower() or 'emp' in c.lower() or 'raz' in c.lower() or 'nom' in c.lower()), columnas_h[0])
+                        col_h_cod = next((c for c in columnas_h if 'cod' in c.lower() or 'art' in c.lower() or 'pro' in c.lower()), columnas_h[1] if len(columnas_h) > 1 else columnas_h[0])
+                        col_h_px = next((c for c in columnas_h if 'prec' in c.lower() or 'net' in c.lower() or 'val' in c.lower() or 'vta' in c.lower() or 'tot' in c.lower()), columnas_h[-1])
                         
-                        # Filtramos coincidencias semánticas del cliente
                         term_emp = normalizar_texto(empresa_cliente)
-                        df_h_filtrado = df_historial[df_historial[col_h_cli].astype(str).apply(normalizar_texto).str.contains(term_emp, na=False)]
-                        
-                        # Buscamos si ya compró el código en cuestión
+                        df_h_filtrado = df_historial[df_historial[col_h_cli].astype(str).apply(normalizar_texto).str.contains(term_emp, na=False, regex=False)]
                         match_hist_prod = df_h_filtrado[df_h_filtrado[col_h_cod].astype(str).str.strip().str.lower() == cod.lower()]
                         
                         if not match_hist_prod.empty:
                             ultimo_precio_cobrado = float(limpiar_precio(match_hist_prod.iloc[-1][col_h_px]))
-                            desc = f"✨ [Historial: Cobrado ${ultimo_precio_cobrado:,.0f} antes] | " + desc
+                            desc = f"✨ [Historial ERP: Cobrado ${ultimo_precio_cobrado:,.0f} anteriormente] | " + desc
                     except:
                         pass
                 
