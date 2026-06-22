@@ -110,6 +110,13 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, desc_porcentaje, total_n
     # 5. Configuración de la Tabla de Productos
     titulos_columnas = ["CÓDIGO", "DESCRIPCIÓN", "CANTIDAD", "PRECIO LISTA", "DSCTO", "PRECIO NETO", "TOTAL NETO"]
     fila_tabla_inicio = 12
+
+    for col_idx, texto_col in enumerate(titulos_columnas, 1):
+        celda = ws.cell(row=fila_tabla_inicio, column=col_idx, value=texto_col)
+        celda.font = font_cabecera_tabla
+        celda.fill = fill_azul_vgm
+        celda.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        celda.border = borde_delgado
     
     for col_idx, texto_col en enumerate(titulos_columnas, 1):
         celda = ws.cell(row=fila_tabla_inicio, column=col_idx, value=texto_col)
