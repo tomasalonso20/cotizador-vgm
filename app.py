@@ -6,19 +6,14 @@ from PIL import Image
 import unicodedata
 import io
 
-# Importaciones para estilización avanzada de Excel
+# Importaciones nativas de openpyxl para diseño y manejo de imágenes
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-
-# Importaciones para la generación del PDF Corporativo
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
+from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Excel Premium)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -60,59 +55,90 @@ def limpiar_precio(valor):
         except:
             return 0.0
 
-# FUNCIÓN: Generación de Excel con Estilo de Catálogo Corporativo
-def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto):
+# FUNCIÓN: Generación de Excel con Estilo de Catálogo Corporativo e Imagen de Logo
+def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Cotización"
+    ws.title = "Cotización VGM"
     
+    # Asegurar líneas de cuadrícula visibles
     ws.views.sheetView[0].showGridLines = True
     
-    font_titulo_central = Font(name="Arial", size=14, bold=True, underline="single")
+    # Tipografías y Colores Corporativos
+    font_titulo_central = Font(name="Arial", size=14, bold=True, underline="single", color="1F497D")
     font_cabecera_tabla = Font(name="Arial", size=10, bold=True, color="FFFFFF")
     font_negrita = Font(name="Arial", size=10, bold=True)
     font_normal = Font(name="Arial", size=10)
     font_firma = Font(name="Arial", size=11, bold=True, italic=True)
     
-    fill_azul_vgm = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+    fill_azul_header = PatternFill(start_color="365F91", end_color="365F91", fill_type="solid")
+    fill_totales_destaque = PatternFill(start_color="E9EDF4", end_color="E9EDF4", fill_type="solid")
+    
     borde_delgado = Border(
-        left=Side(style='thin', color='A0A0A0'), right=Side(style='thin', color='A0A0A0'),
-        top=Side(style='thin', color='A0A0A0'), bottom=Side(style='thin', color='A0A0A0')
+        left=Side(style='thin', color='BFBFBF'), right=Side(style='thin', color='BFBFBF'),
+        top=Side(style='thin', color='BFBFBF'), bottom=Side(style='thin', color='BFBFBF')
     )
     
-    ws["A1"] = "VGM SpA"
-    ws["A1"].font = Font(name="Arial", size=13, bold=True)
-    ws["A2"] = "76.834.968-1"
-    ws["A2"].font = font_negrita
-    ws["A3"] = "Chopin 2848. San Joaquín. Santiago"
-    ws["A3"].font = font_normal
+    # Manejo dinámico del Logo Corporativo
+    if logo_bytes:
+        try:
+            img_stream = io.BytesIO(logo_bytes)
+            img = OpenpyxlImage(img_stream)
+            # Redimensionar proporcionalmente para el encabezado (ej: 140x55 px)
+            img.width = 140
+            img.height = 55
+            ws.add_image(img, 'A1')
+            ws.row_dimensions[1].height = 20
+            ws.row_dimensions[2].height = 20
+            ws.row_dimensions[3].height = 20
+        except Exception as e:
+            ws["A1"] = "VGM SpA"
+    else:
+        ws["A1"] = "VGM SpA"
+        ws["A1"].font = Font(name="Arial", size=14, bold=True, color="1F497D")
+
+    # Datos fijos de la empresa (Columna B si hay logo para que no se encima)
+    col_datos = "B" if logo_bytes else "A"
+    ws[f"{col_datos}1"] = "VGM SpA"
+    ws[f"{col_datos}1"].font = Font(name="Arial", size=11, bold=True)
+    ws[f"{col_datos}2"] = "RUT: 76.834.968-1"
+    ws[f"{col_datos}2"].font = font_negrita
+    ws[f"{col_datos}3"] = "Chopin 2848, San Joaquín, Santiago"
+    ws[f"{col_datos}3"].font = font_normal
     
+    # Fecha de Emisión (Derecha)
     ws["G1"] = f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}"
     ws["G1"].font = font_negrita
     ws["G1"].alignment = Alignment(horizontal="right")
     
-    ws["C5"] = f"COTIZACIÓN N° {nro_cotiz}"
+    # Folio de Cotización Central
+    ws["C5"] = f"COTIZACIÓN COMERCIAL N° {nro_cotiz}"
     ws["C5"].font = font_titulo_central
     ws["C5"].alignment = Alignment(horizontal="center", vertical="center")
     
+    # Datos del Cliente Receptor
     ws["A7"] = f"Sr(a).: {cliente if cliente else 'No especificado'}"
     ws["A7"].font = font_negrita
     ws["A8"] = f"Empresa: {empresa if empresa else 'No especificada'}"
     ws["A8"].font = font_negrita
-    ws["A9"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
+    ws["A9"] = "En atención a su gentil solicitud, presentamos nuestra propuesta económica para las herramientas solicitadas:"
     ws["A9"].font = font_normal
     
+    # Estructura de Columnas de Catálogo
     titulos_columnas = ["CÓDIGO", "MARCA", "DESCRIPCIÓN", "PRECIO NETO", "CANTIDAD", "TOTAL NETO", "IMAGEN REFERENCIAL"]
     fila_tabla_inicio = 12
     
     for col_idx, texto_col in enumerate(titulos_columnas, 1):
         celda = ws.cell(row=fila_tabla_inicio, column=col_idx, value=texto_col)
         celda.font = font_cabecera_tabla
-        celda.fill = fill_azul_vgm
+        celda.fill = fill_azul_header
         celda.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         celda.border = borde_delgado
         
+    ws.row_dimensions[fila_tabla_inicio].height = 28
+    
+    # Volcado de productos con celdas altas para fotos
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
         ws.cell(row=fila_actual, column=1, value=str(fila["Código"])).alignment = Alignment(horizontal="center", vertical="center")
@@ -129,16 +155,18 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
-        ws.cell(row=fila_actual, column=7, value="[Espacio Imagen]").alignment = Alignment(horizontal="center", vertical="center")
+        # Celda de Imagen vacía y lista para pegar o insertar
+        ws.cell(row=fila_actual, column=7, value="").alignment = Alignment(horizontal="center", vertical="center")
         
         for c_idx in range(1, 8):
             celda_f = ws.cell(row=fila_actual, column=c_idx)
             celda_f.font = font_normal
             celda_f.border = borde_delgado
             
-        ws.row_dimensions[fila_actual].height = 45  
+        ws.row_dimensions[fila_actual].height = 65  # Altura perfecta para vista de catálogo
         fila_actual += 1
         
+    # Tabla de Cierre y Totales
     totales_comerciales = [("SUBTOTAL", total_neto), ("IVA (19%)", iva), ("TOTAL BRUTO", total_bruto)]
     for etiqueta, valor in totales_comerciales:
         celda_lbl = ws.cell(row=fila_actual, column=5, value=etiqueta)
@@ -148,9 +176,11 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         
         celda_val = ws.cell(row=fila_actual, column=6, value=valor)
         celda_val.font = font_negrita
+        celda_val.fill = fill_totales_destaque if "BRUTO" in etiqueta else PatternFill(fill_type=None)
         celda_val.number_format = '$#,##0'
         celda_val.alignment = Alignment(horizontal="right", vertical="center")
         celda_val.border = borde_delgado
+        ws.row_dimensions[fila_actual].height = 22
         fila_actual += 1
         
     fila_actual += 1
@@ -161,124 +191,23 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws.cell(row=fila_actual+4, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
     
     ws.cell(row=fila_actual+3, column=6, value="Enrique Hernández P.").font = font_firma
+    ws.cell(row=fila_actual+3, column=6).alignment = Alignment(horizontal="right")
     ws.cell(row=fila_actual+4, column=6, value="VGM SpA").font = font_negrita
+    ws.cell(row=fila_actual+4, column=6).alignment = Alignment(horizontal="right")
     
-    ws.column_dimensions['A'].width = 13
-    ws.column_dimensions['B'].width = 13
-    ws.column_dimensions['C'].width = 40
-    ws.column_dimensions['D'].width = 15
+    # Ajustes finos de ancho de columnas
+    ws.column_dimensions['A'].width = 14
+    ws.column_dimensions['B'].width = 14
+    ws.column_dimensions['C'].width = 45
+    ws.column_dimensions['D'].width = 16
     ws.column_dimensions['E'].width = 11
-    ws.column_dimensions['F'].width = 16
-    ws.column_dimensions['G'].width = 20
+    ws.column_dimensions['F'].width = 18
+    ws.column_dimensions['G'].width = 24
     
     wb.save(output)
     return output.getvalue()
 
-# FUNCIÓN: Generación de PDF Oficial Corporativo Protegido contra Errores
-def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
-    story = []
-    
-    styles = getSampleStyleSheet()
-    style_normal = styles['Normal']  # DECLARADO CORRECTAMENTE AQUÍ
-    
-    style_empresa = ParagraphStyle('EmpresaStyle', parent=style_normal, fontName='Helvetica-Bold', fontSize=12, leading=14)
-    style_rut = ParagraphStyle('RutStyle', parent=style_normal, fontName='Helvetica', fontSize=10, leading=12)
-    style_derecha = ParagraphStyle('DerechaStyle', parent=style_normal, fontName='Helvetica-Bold', fontSize=10, leading=12, alignment=2)
-    style_titulo = ParagraphStyle('TituloStyle', parent=style_normal, fontName='Helvetica-Bold', fontSize=14, leading=16, alignment=1)
-    
-    style_tabla_header = ParagraphStyle('TableHeader', parent=style_normal, fontName='Helvetica-Bold', fontSize=9, leading=11, textColor=colors.white, alignment=1)
-    style_tabla_celda = ParagraphStyle('TableCell', parent=style_normal, fontName='Helvetica', fontSize=8, leading=10)
-    style_tabla_celda_c = ParagraphStyle('TableCellC', parent=style_normal, fontName='Helvetica', fontSize=8, leading=10, alignment=1)
-    style_tabla_celda_r = ParagraphStyle('TableCellR', parent=style_normal, fontName='Helvetica', fontSize=8, leading=10, alignment=2)
-    
-    style_cond_bold = ParagraphStyle('CondBold', parent=style_rut, fontName='Helvetica-Bold', spaceAfter=4)
-    style_cond_normal = ParagraphStyle('CondNormal', parent=style_rut, spaceAfter=4)
-    
-    p_empresa = Paragraph("VGM SpA", style_empresa)
-    p_rut = Paragraph("RUT: 76.834.968-1<br/>Chopin 2848. San Joaquín. Santiago", style_rut)
-    p_fecha = Paragraph(f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}", style_derecha)
-    
-    header_table = Table([[p_empresa, p_fecha], [p_rut, Paragraph("", style_normal)]], colWidths=[270, 270])
-    header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
-    story.append(header_table)
-    story.append(Spacer(1, 15))
-    
-    story.append(Paragraph(f"<u>COTIZACIÓN N° {nro_cotiz}</u>", style_titulo))
-    story.append(Spacer(1, 15))
-    
-    story.append(Paragraph(f"<b>Sr(a).:</b> {cliente if cliente else 'No especificado'}", style_rut))
-    story.append(Paragraph(f"<b>Empresa:</b> {empresa if empresa else 'No especificada'}", style_rut))
-    story.append(Spacer(1, 8))
-    story.append(Paragraph("En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:", style_rut))
-    story.append(Spacer(1, 12))
-    
-    headers = [
-        Paragraph("CÓDIGO", style_tabla_header), Paragraph("MARCA", style_tabla_header),
-        Paragraph("DESCRIPCIÓN", style_tabla_header), Paragraph("P. NETO", style_tabla_header),
-        Paragraph("CANT", style_tabla_header), Paragraph("TOTAL", style_tabla_header),
-        Paragraph("IMAGEN", style_tabla_header)
-    ]
-    
-    tabla_data = [headers]
-    for _, fila in df_cotiz.iterrows():
-        tabla_data.append([
-            Paragraph(str(fila["Código"]), style_tabla_celda_c),
-            Paragraph("YATO/VOREL", style_tabla_celda_c),
-            Paragraph(str(fila["Descripción Catálogo"]), style_tabla_celda),
-            Paragraph(f"${fila['Precio Final (Neto)']:,.0f}", style_tabla_celda_r),
-            Paragraph(str(int(fila["Cantidad"])), style_tabla_celda_c),
-            Paragraph(f"${fila['Total Neto']:,.0f}", style_tabla_celda_r),
-            Paragraph("[Cuadro Ref]", style_tabla_celda_c)
-        ])
-        
-    t_productos = Table(tabla_data, colWidths=[55, 55, 175, 55, 35, 60, 105])
-    t_productos.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#4F81BD")),
-        ('ALIGN', (0,0), (-1,0), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
-        ('TOPPADDING', (0,0), (-1,-1), 8),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
-    ]))
-    story.append(t_productos)
-    story.append(Spacer(1, 10))
-    
-    p_obs_titulo = Paragraph("<b>Observaciones:</b>", style_cond_bold)
-    p_cond1 = Paragraph("<b>Condiciones de Venta:</b>", style_cond_bold)
-    p_cond2 = Paragraph("1: Plazo de entrega por confirmar<br/>2: Validez de cotización: 7 días", style_cond_normal)
-    p_pago = Paragraph("<b>Condiciones de Pago: CONTADO</b>", style_cond_bold)
-    
-    bloque_izq = [p_obs_titulo, p_cond1, p_cond2, p_pago]
-    
-    t_totales_data = [
-        [Paragraph("", style_normal), Paragraph("SUBTOTAL:", style_derecha), Paragraph(f"${total_neto:,.0f}", style_derecha)],
-        [Paragraph("", style_normal), Paragraph("IVA (19%):", style_derecha), Paragraph(f"${iva:,.0f}", style_derecha)],
-        [Paragraph("", style_normal), Paragraph("TOTAL BRUTO:", style_derecha), Paragraph(f"${total_bruto:,.0f}", style_derecha)]
-    ]
-    t_totales = Table(t_totales_data, colWidths=[100, 100, 100])
-    t_totales.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('GRID', (1,0), (-1,-1), 0.5, colors.lightgrey),
-        ('BACKGROUND', (1,2), (2,2), colors.HexColor("#E2EFDA"))
-    ]))
-    
-    footer_table = Table([[bloque_izq, t_totales]], colWidths=[240, 300])
-    footer_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
-    story.append(footer_table)
-    story.append(Spacer(1, 30))
-    
-    p_firma = Paragraph("<i>Enrique Hernández P.</i><br/><b>VGM SpA</b>", style_derecha)
-    
-    firma_table = Table([[Paragraph("", style_normal), p_firma]], colWidths=[340, 200])
-    story.append(firma_table)
-    
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.getvalue()
-
-# Barra lateral de configuración y datos comerciales
+# Barra lateral - Interfaz de Usuario
 with st.sidebar:
     st.subheader("💼 Datos de la Cotización")
     nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej: Claudia Araya")
@@ -288,20 +217,23 @@ with st.sidebar:
     precio_manual_input = st.text_input("Precio Neto Fijo Alternativo (Opcional):", placeholder="Ej: 500000")
     
     st.markdown("---")
-    with st.expander("⚙️ Configuración del Sistema (API / Columnas)", expanded=False):
+    st.subheader("🖼️ Branding & Personalización")
+    logo_empresa = st.file_uploader("Sube el Logo de tu Empresa (PNG/JPG)", type=["png", "jpg", "jpeg"])
+    
+    st.markdown("---")
+    with st.expander("⚙️ Verificación de Columnas Catálogo", expanded=False):
         api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
-        st.subheader("📊 Verificación de Columnas")
         col_codigo = "CODIGO"
         col_desc = "DESCRIPCION"
         col_precio = "PRECIO UNITARIO NETO"
 
-# Columnas de carga de archivos de la interfaz
+# Cuadrícula principal de carga
 col1, col2 = st.columns(2)
 with col1:
-    st.subheader("1. Sube tu lista de precios (Excel .xlsx)")
-    archivo_excel = st.file_uploader("Selecciona tu archivo Excel optimizado", type=["xlsx"])
+    st.subheader("1. Sube tu catálogo de precios (.xlsx)")
+    archivo_excel = st.file_uploader("Selecciona el archivo Excel de precios", type=["xlsx"])
 with col2:
-    st.subheader("2. Sube el pantallazo del pedido (WhatsApp / Correo)")
+    st.subheader("2. Sube el pantallazo de la solicitud")
     imagen_pedido = st.file_uploader("Selecciona la imagen del pedido", type=["png", "jpg", "jpeg"])
 
 if archivo_excel:
@@ -313,16 +245,16 @@ if archivo_excel:
         idx_precio = next((i for i, c in enumerate(columnas_disponibles) if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), len(columnas_disponibles) - 1)
         col_codigo, col_desc, col_precio = columnas_disponibles[idx_cod], columnas_disponibles[idx_desc], columnas_disponibles[idx_precio]
     except Exception as e:
-        st.sidebar.error(f"Error al analizar las columnas del Excel: {e}")
+        st.sidebar.error(f"Error al mapear columnas: {e}")
 
-# Ejecución del motor híbrido RAG
+# Procesamiento Inteligente
 if archivo_excel and imagen_pedido and api_key:
-    if st.button("🔥 Generar Cotización Inteligente"):
+    if st.button("🔥 Generar Cotización Excel Inteligente"):
         try:
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            st.info("🔄 Fase 1: Leyendo imagen y expandiendo términos técnicos de búsqueda...")
+            st.info("🔄 Fase 1: Leyendo imagen de solicitud e interpretando requerimientos...")
             df = pd.read_excel(archivo_excel, header=1)
             df.columns = [str(c).strip() for c in df.columns]
             df['__desc_clean'] = df[col_desc].apply(normalizar_texto)
@@ -360,7 +292,7 @@ if archivo_excel and imagen_pedido and api_key:
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
             
-            st.info("🔄 Fase 2: Ejecutando pre-filtrado semántico expandido de amplio espectro...")
+            st.info("🔄 Fase 2: Cruzando datos semánticos con la lista de precios...")
             cantidades_dict = {item.get("busqueda", ""): int(item.get("cantidad", 1)) if item.get("cantidad") is not None else 1 for item in lista_productos}
 
             candidates_rag = {}
@@ -384,7 +316,7 @@ if archivo_excel and imagen_pedido and api_key:
                 
                 candidates_rag[termino] = [{"codigo": str(r[col_codigo]), "descripcion": str(r[col_desc]), "precio": float(limpiar_precio(r[col_precio]))} for _, r in df_filtrado.iterrows()]
 
-            st.info("🔄 Fase 3: Resolviendo ambigüedades con homologación experta de catálogo...")
+            st.info("🔄 Fase 3: Homologando códigos exactos del catálogo...")
             prompt_resolucion = f"""
             Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
@@ -449,7 +381,7 @@ if archivo_excel and imagen_pedido and api_key:
                 
             if cotizacion_final:
                 df_resultado = pd.DataFrame(cotizacion_final)
-                st.success("¡Cotización inteligente procesada con éxito!")
+                st.success("¡Cotización construida exitosamente!")
                 st.dataframe(df_resultado, use_container_width=True)
                 
                 subtotal_lista = (df_resultado["Precio Lista (Neto)"] * df_resultado["Cantidad"]).sum()
@@ -458,27 +390,34 @@ if archivo_excel and imagen_pedido and api_key:
                 iva_calculado = total_neto_final * 0.19
                 total_bruto = total_neto_final + iva_calculado
                 
-                st.markdown("### 📊 Desglose de Valores Comerciales (CLP)")
+                st.markdown("### 📊 Desglose Económico de la Operación")
                 c_neto, c_desc, c_neto_f, c_iva, c_bruto = st.columns(5)
                 c_neto.metric(label="Total Lista Neto", value=f"${subtotal_lista:,.0f}")
-                c_desc.metric(label="Descuento Total", value=f"-${descuento_total_pesos:,.0f}")
+                c_desc.metric(label="Descuento Otorgado", value=f"-${descuento_total_pesos:,.0f}")
                 c_neto_f.metric(label="Neto Final Cliente", value=f"${total_neto_final:,.0f}")
                 c_iva.metric(label="IVA (19%)", value=f"${iva_calculado:,.0f}")
-                c_bruto.metric(label="Total Bruto a Pagar", value=f"${total_bruto:,.0f}")
+                c_bruto.metric(label="Total Bruto", value=f"${total_bruto:,.0f}")
                 
                 st.markdown("---")
-                st.subheader("📥 Descargar Documentos Comerciales Oficiales")
                 
-                col_d1, col_d2 = st.columns(2)
-                with col_d1:
-                    excel_binario = generar_excel_comercial(df_resultado, nombre_cliente, empresa_cliente, numero_folio, total_neto_final, iva_calculado, total_bruto)
-                    st.download_button(label="🟢 Descargar Cotización en Excel", data=excel_binario, file_name=f"Cotizacion_{numero_folio}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                with col_d2:
-                    pdf_binario = generar_pdf_comercial(df_resultado, nombre_cliente, empresa_cliente, numero_folio, total_neto_final, iva_calculado, total_bruto)
-                    st.download_button(label="🔵 Descargar Cotización en PDF", data=pdf_binario, file_name=f"Cotizacion_{numero_folio}.pdf", mime="application/pdf")
+                # Obtención de bytes de logo si existe
+                logo_data = logo_empresa.getvalue() if logo_empresa else None
+                
+                excel_binario = generar_excel_comercial(
+                    df_resultado, nombre_cliente, empresa_cliente, numero_folio, 
+                    total_neto_final, iva_calculado, total_bruto, logo_data
+                )
+                
+                st.download_button(
+                    label="🟢 Descargar Documento Excel Premium (.xlsx)", 
+                    data=excel_binario, 
+                    file_name=f"Cotizacion_{numero_folio}.xlsx", 
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
             else:
-                st.warning("No se pudieron asociar los productos.")
+                st.warning("No se logró procesar ningún ítem.")
         except Exception as e:
-            st.error(f"Error crítico en el motor de IA: {e}")
+            st.error(f"Error en el motor de automatización: {e}")
 else:
-    st.info("Introduce tu Gemini API Key a la izquierda y sube tus dos archivos para comenzar.")
+    st.info("Ingresa tu Gemini API Key y carga el catálogo junto al pedido para activar el generador.")
