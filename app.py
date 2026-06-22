@@ -60,7 +60,7 @@ def limpiar_precio(valor):
         except:
             return 0.0
 
-# FUNCIÓN: Generación de Excel con Estilo de Catálogo
+# FUNCIÓN: Generación de Excel con Estilo de Catálogo Corporativo
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -106,7 +106,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     titulos_columnas = ["CÓDIGO", "MARCA", "DESCRIPCIÓN", "PRECIO NETO", "CANTIDAD", "TOTAL NETO", "IMAGEN REFERENCIAL"]
     fila_tabla_inicio = 12
     
-    # CORREGIDO: Cambiado 'en' por 'in' para cumplir la sintaxis de Python
     for col_idx, texto_col in enumerate(titulos_columnas, 1):
         celda = ws.cell(row=fila_tabla_inicio, column=col_idx, value=texto_col)
         celda.font = font_cabecera_tabla
@@ -175,7 +174,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     wb.save(output)
     return output.getvalue()
 
-# FUNCIÓN: Generación de PDF Oficial de Alta Calidad
+# FUNCIÓN: Generación de PDF Oficial Corporativo
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
@@ -439,7 +438,7 @@ if archivo_excel and imagen_pedido and api_key:
                     
                 cotizacion_final.append({
                     "Código": cod, "Descripción Catálogo": desc, "Cantidad": cant,
-                    "Precio List (Neto)": px_lista, "Descuento Aplicado": texto_descuento_col,
+                    "Precio Lista (Neto)": px_lista, "Descuento Aplicado": texto_descuento_col,
                     "Precio Final (Neto)": px_final_neto, "Total Neto": px_final_neto * cant
                 })
                 
@@ -448,7 +447,8 @@ if archivo_excel and imagen_pedido and api_key:
                 st.success("¡Cotización inteligente procesada con éxito!")
                 st.dataframe(df_resultado, use_container_width=True)
                 
-                subtotal_lista = (df_resultado["Precio List (Neto)"] * df_resultado["Cantidad"]).sum()
+                # UNIFICADO: Corregido el nombre de columna de 'Precio List' a 'Precio Lista' para evitar KeyError
+                subtotal_lista = (df_resultado["Precio Lista (Neto)"] * df_resultado["Cantidad"]).sum()
                 total_neto_final = df_resultado["Total Neto"].sum()
                 descuento_total_pesos = max(subtotal_lista - total_neto_final, 0.0)
                 iva_calculado = total_neto_final * 0.19
@@ -477,4 +477,4 @@ if archivo_excel and imagen_pedido and api_key:
         except Exception as e:
             st.error(f"Error crítico en el motor de IA: {e}")
 else:
-    st.info("Introduce tu Gemini API Key a la izquierda y sube tus dos archivos para comenzar.")
+    st.info("Introduce tu Gemini API
