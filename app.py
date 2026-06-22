@@ -106,6 +106,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     titulos_columnas = ["CÓDIGO", "MARCA", "DESCRIPCIÓN", "PRECIO NETO", "CANTIDAD", "TOTAL NETO", "IMAGEN REFERENCIAL"]
     fila_tabla_inicio = 12
     
+    # CORREGIDO: Cambiado 'en' por 'in' para cumplir la sintaxis de Python
     for col_idx, texto_col in enumerate(titulos_columnas, 1):
         celda = ws.cell(row=fila_tabla_inicio, column=col_idx, value=texto_col)
         celda.font = font_cabecera_tabla
@@ -136,7 +137,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
             celda_f.font = font_normal
             celda_f.border = borde_delgado
             
-        ws.row_dimensions[fila_actual].height = 45  # Altura de celda tipo catálogo
+        ws.row_dimensions[fila_actual].height = 45  
         fila_actual += 1
         
     totales_comerciales = [("SUBTOTAL", total_neto), ("IVA (19%)", iva), ("TOTAL BRUTO", total_bruto)]
@@ -192,7 +193,6 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     style_tabla_celda_c = ParagraphStyle('TableCellC', parent=style_normal, fontName='Helvetica', fontSize=8, leading=10, alignment=1)
     style_tabla_celda_r = ParagraphStyle('TableCellR', parent=style_normal, fontName='Helvetica', fontSize=8, leading=10, alignment=2)
     
-    # Encabezado superior
     p_empresa = Paragraph("VGM SpA", style_empresa)
     p_rut = Paragraph("RUT: 76.834.968-1<br/>Chopin 2848. San Joaquín. Santiago", style_rut)
     p_fecha = Paragraph(f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}", style_derecha)
@@ -202,18 +202,15 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     story.append(header_table)
     story.append(Spacer(1, 15))
     
-    # Título central
     story.append(Paragraph(f"COTIZACIÓN N° {nro_cotiz}", style_titulo))
     story.append(Spacer(1, 15))
     
-    # Información del cliente
     story.append(Paragraph(f"<b>Sr(a).:</b> {cliente if cliente else 'No especificado'}", style_rut))
     story.append(Paragraph(f"<b>Empresa:</b> {empresa if empresa else 'No especificada'}", style_rut))
     story.append(Spacer(1, 8))
     story.append(Paragraph("En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:", style_rut))
     story.append(Spacer(1, 12))
     
-    # Estructura de la Tabla de Productos
     headers = [
         Paragraph("CÓDIGO", style_tabla_header), Paragraph("MARCA", style_tabla_header),
         Paragraph("DESCRIPCIÓN", style_tabla_header), Paragraph("P. NETO", style_tabla_header),
@@ -233,7 +230,6 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
             Paragraph("[Cuadro Ref]", style_tabla_celda_c)
         ])
         
-    # Ancho total sumado = 540 puntos (Ancho de página carta con márgenes de 36)
     t_productos = Table(tabla_data, colWidths=[55, 55, 175, 55, 35, 60, 105])
     t_productos.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#4F81BD")),
@@ -246,7 +242,6 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     story.append(t_productos)
     story.append(Spacer(1, 10))
     
-    # Bloque de Totales y Cierre Comercial
     p_obs_titulo = Paragraph("<b>Observaciones:</b>", style_rut)
     p_cond1 = Paragraph("<b>Condiciones de Venta:</b>", style_rut)
     p_cond2 = Paragraph("1: Plazo de entrega por confirmar<br/>2: Validez de cotización: 7 días", style_rut)
@@ -271,7 +266,6 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     story.append(footer_table)
     story.append(Spacer(1, 30))
     
-    # Firma Responsable
     p_firma = Paragraph("<i>Enrique Hernández P.</i><br/><b>VGM SpA</b>", style_derecha)
     firma_table = Table([["", p_firma]], colWidths=[340, 200])
     story.append(firma_table)
