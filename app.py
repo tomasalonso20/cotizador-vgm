@@ -155,7 +155,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         
     fila_actual += 1
     ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
-    ws.cell(row=fila_actual+1, column=1, value="Conditions de Venta:").font = font_negrita
+    ws.cell(row=fila_actual+1, column=1, value="Condiciones de Venta:").font = font_negrita
     ws.cell(row=fila_actual+2, column=1, value="1: Plazo de entrega por confirmar").font = font_normal
     ws.cell(row=fila_actual+3, column=1, value="2: Validez de cotización: 7 días").font = font_normal
     ws.cell(row=fila_actual+4, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
@@ -181,7 +181,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     story = []
     
     styles = getSampleStyleSheet()
-    style_normal = styles['Normal']
+    style_normal = styles['Normal']  # DECLARADO CORRECTAMENTE AQUÍ
     
     style_empresa = ParagraphStyle('EmpresaStyle', parent=style_normal, fontName='Helvetica-Bold', fontSize=12, leading=14)
     style_rut = ParagraphStyle('RutStyle', parent=style_normal, fontName='Helvetica', fontSize=10, leading=12)
@@ -252,7 +252,6 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     
     bloque_izq = [p_obs_titulo, p_cond1, p_cond2, p_pago]
     
-    # CORREGIDO: Las celdas de relleno ahora usan Paragraph estructurales en lugar de texto plano ""
     t_totales_data = [
         [Paragraph("", style_normal), Paragraph("SUBTOTAL:", style_derecha), Paragraph(f"${total_neto:,.0f}", style_derecha)],
         [Paragraph("", style_normal), Paragraph("IVA (19%):", style_derecha), Paragraph(f"${iva:,.0f}", style_derecha)],
@@ -272,7 +271,6 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     
     p_firma = Paragraph("<i>Enrique Hernández P.</i><br/><b>VGM SpA</b>", style_derecha)
     
-    # CORREGIDO: Celda de espacio adaptada para ReportLab
     firma_table = Table([[Paragraph("", style_normal), p_firma]], colWidths=[340, 200])
     story.append(firma_table)
     
@@ -395,7 +393,7 @@ if archivo_excel and imagen_pedido and api_key:
             1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
             2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
             3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
-            4. LLAVES DE IMPACTO INALÁBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
+            4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
             5. FILTRO ESTRICTO NO ENCONTRADO: Si no calza, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
             
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
@@ -423,4 +421,64 @@ if archivo_excel and imagen_pedido and api_key:
             
             cotizacion_final = []
             for res in resultados_lista:
-                origen =
+                origen = res.get("busqueda_original", "")
+                cant = int(cantidades_dict.get(origen, 1))
+                px_lista = float(res.get("precio_elegido", 0.0))
+                desc = res.get("descripcion_elegida", "❌ NO ENCONTRADO")
+                cod = res.get("codigo_elegido", "MANUAL")
+                
+                if cod == "MANUAL" or "❌" in desc:
+                    desc = f"❌ NO ENCONTRADO: (Falta en catálogo o requiere código manual para '{origen}')"
+                    px_lista = 0.0
+                elif not res.get("coincidencia_exacta", True):
+                    desc = f"⚠️ (Match sugerido) {desc}"
+                
+                precio_manual_val = limpiar_precio(precio_manual_input)
+                if descuento_aplicar == 0 and precio_manual_val > 0 and cod != "MANUAL":
+                    px_final_neto = precio_manual_val
+                    texto_descuento_col = "Precio Especial"
+                else:
+                    px_final_neto = px_lista - (px_lista * (descuento_aplicar / 100))
+                    texto_descuento_col = f"{descuento_aplicar}%"
+                    
+                cotizacion_final.append({
+                    "Código": cod, "Descripción Catálogo": desc, "Cantidad": cant,
+                    "Precio Lista (Neto)": px_lista, "Descuento Aplicado": texto_descuento_col,
+                    "Precio Final (Neto)": px_final_neto, "Total Neto": px_final_neto * cant
+                })
+                
+            if cotizacion_final:
+                df_resultado = pd.DataFrame(cotizacion_final)
+                st.success("¡Cotización inteligente procesada con éxito!")
+                st.dataframe(df_resultado, use_container_width=True)
+                
+                subtotal_lista = (df_resultado["Precio Lista (Neto)"] * df_resultado["Cantidad"]).sum()
+                total_neto_final = df_resultado["Total Neto"].sum()
+                descuento_total_pesos = max(subtotal_lista - total_neto_final, 0.0)
+                iva_calculado = total_neto_final * 0.19
+                total_bruto = total_neto_final + iva_calculado
+                
+                st.markdown("### 📊 Desglose de Valores Comerciales (CLP)")
+                c_neto, c_desc, c_neto_f, c_iva, c_bruto = st.columns(5)
+                c_neto.metric(label="Total Lista Neto", value=f"${subtotal_lista:,.0f}")
+                c_desc.metric(label="Descuento Total", value=f"-${descuento_total_pesos:,.0f}")
+                c_neto_f.metric(label="Neto Final Cliente", value=f"${total_neto_final:,.0f}")
+                c_iva.metric(label="IVA (19%)", value=f"${iva_calculado:,.0f}")
+                c_bruto.metric(label="Total Bruto a Pagar", value=f"${total_bruto:,.0f}")
+                
+                st.markdown("---")
+                st.subheader("📥 Descargar Documentos Comerciales Oficiales")
+                
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    excel_binario = generar_excel_comercial(df_resultado, nombre_cliente, empresa_cliente, numero_folio, total_neto_final, iva_calculado, total_bruto)
+                    st.download_button(label="🟢 Descargar Cotización en Excel", data=excel_binario, file_name=f"Cotizacion_{numero_folio}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                with col_d2:
+                    pdf_binario = generar_pdf_comercial(df_resultado, nombre_cliente, empresa_cliente, numero_folio, total_neto_final, iva_calculado, total_bruto)
+                    st.download_button(label="🔵 Descargar Cotización en PDF", data=pdf_binario, file_name=f"Cotizacion_{numero_folio}.pdf", mime="application/pdf")
+            else:
+                st.warning("No se pudieron asociar los productos.")
+        except Exception as e:
+            st.error(f"Error crítico en el motor de IA: {e}")
+else:
+    st.info("Introduce tu Gemini API Key a la izquierda y sube tus dos archivos para comenzar.")
