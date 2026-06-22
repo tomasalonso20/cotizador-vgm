@@ -135,7 +135,8 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         cod_limpio = cod_original.strip().lower()
         
         ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=fila_actual, column=2, value="YATO/VOREL").alignment = Alignment(horizontal="center", vertical="center")
+        # CORRECCIÓN: Ahora usa la marca dinámica entregada por el DataFrame en lugar de dejarla fija
+        ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=3, value=str(fila["Descripción Catálogo"])).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         
         c_neto = ws.cell(row=fila_actual, column=4, value=float(fila["Precio Final (Neto)"]))
@@ -148,7 +149,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
-        # LÓGICA DE LA OPCIÓN C: Insertar la imagen si fue subida en la App
+        # Inserción de la foto si fue cargada en la App
         ws.cell(row=fila_actual, column=7, value="").alignment = Alignment(horizontal="center", vertical="center")
         if dict_imagenes and cod_limpio in dict_imagenes:
             try:
@@ -218,14 +219,14 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     fila_actual += 1
     
-    ws.cell(row=fila_actual, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
+    ws.cell(row=fila_actual, column=1, value="Conditions de Pago: CONTADO").font = font_negrita
     ws.cell(row=fila_actual, column=7, value="VGM SpA").font = font_negrita
     ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     fila_actual += 1
     
     ws.cell(row=fila_actual, column=1, value="A la espera de sus comentarios, le saluda atentamente :").font = font_normal
     
-    # Ancho de columnas para evitar cortes de texto
+    # Ancho de columnas para evitar recortes
     ws.column_dimensions['A'].width = 14
     ws.column_dimensions['B'].width = 14
     ws.column_dimensions['C'].width = 46
@@ -325,7 +326,8 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response = model.generate_content([prompt_extraccion, imagen_lista])
-            texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
+            texto_limpio = response.text.strip().replace("
+```json", "").replace("```", "")
             
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
@@ -354,17 +356,17 @@ if archivo_excel and imagen_pedido and api_key:
                 
                 candidates_rag[termino] = [{"codigo": str(r[col_codigo]), "descripcion": str(r[col_desc]), "precio": float(limpiar_precio(r[col_precio]))} for _, r in df_filtrado.iterrows()]
 
-            st.info("🔄 Fase 3: Homologando códigos exactos del catálogo...")
+            st.info("🔄 Fase 3: Homologando códigos y marcas del catálogo...")
             prompt_resolucion = f"""
             Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN:
-            1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
-            2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
-            3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
-            4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
-            5. FILTRO ESTRICTO NO ENCONTRADO: Si no calza, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
+            1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. La marca es 'YATO'. NO elijas pistolas para inflar neumáticos (YT2370).
+            2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'. La marca es 'YATO'.
+            3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518. LA MARCA EXCLUSIVA PARA ESTE PRODUCTO DEBE SER 'IRIMO'.
+            4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'. Marca 'YATO'.
+            5. FILTRO ESTRICTO NO ENCONTRADO: Si no calza, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0, 'marca_elegida': 'YATO/VOREL'.
             
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             {json.dumps(candidates_rag, ensure_ascii=False, indent=2)}
@@ -375,6 +377,7 @@ if archivo_excel and imagen_pedido and api_key:
                     {{
                         "busqueda_original": "nombre exacto de la busqueda original",
                         "codigo_elegido": "código real del catálogo o 'MANUAL'",
+                        "marca_elegida": "IRIMO, YATO o VOREL según corresponda de forma exacta",
                         "descripcion_elegida": "descripción exacta del catálogo o '❌ NO ENCONTRADO'",
                         "precio_elegido": 12345.0,
                         "coincidencia_exacta": true o false
@@ -384,7 +387,8 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response_resolucion = model.generate_content(prompt_resolucion)
-            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("```", "")
+            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("
+```", "")
             
             datos_finales = json.loads(texto_resolucion)
             resultados_lista = datos_finales.get("resultados", [])
@@ -397,6 +401,11 @@ if archivo_excel and imagen_pedido and api_key:
                 px_lista = float(res.get("precio_elegido", 0.0))
                 desc = res.get("descripcion_elegida", "❌ NO ENCONTRADO")
                 cod = res.get("codigo_elegido", "MANUAL")
+                marca = str(res.get("marca_elegida", "YATO/VOREL")).strip().upper()
+                
+                # Regla de seguridad dura para la marca de la linterna de cabeza
+                if cod.strip().upper() == "L-HEAD-1" or "HEAD" in desc.upper() or "CABEZA" in desc.upper():
+                    marca = "IRIMO"
                 
                 if cod == "MANUAL" or "❌" in desc:
                     desc = f"❌ NO ENCONTRADO: (Falta en catálogo o requiere código manual para '{origen}')"
@@ -413,7 +422,7 @@ if archivo_excel and imagen_pedido and api_key:
                     texto_descuento_col = f"{descuento_aplicar}%"
                     
                 cotizacion_final.append({
-                    "Código": cod, "Descripción Catálogo": desc, "Cantidad": cant,
+                    "Código": cod, "Marca": marca, "Descripción Catálogo": desc, "Cantidad": cant,
                     "Precio Lista (Neto)": px_lista, "Descuento Aplicado": texto_descuento_col,
                     "Precio Final (Neto)": px_final_neto, "Total Neto": px_final_neto * cant
                 })
