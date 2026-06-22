@@ -154,7 +154,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
             try:
                 img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio])
                 img_excel = OpenpyxlImage(img_prod_stream)
-                # Proporciones perfectas para una celda de alto 65pt y ancho 24
                 img_excel.width = 115
                 img_excel.height = 80
                 ws.add_image(img_excel, f"G{fila_actual}")
@@ -166,7 +165,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
             celda_f.font = font_normal
             celda_f.border = borde_delgado
             
-        ws.row_dimensions[fila_actual].height = 65  # Altura de catálogo para que quepa la foto perfectamente
+        ws.row_dimensions[fila_actual].height = 65  
         fila_actual += 1
         
     # Cierre de Totales Comerciales
@@ -226,7 +225,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     ws.cell(row=fila_actual, column=1, value="A la espera de sus comentarios, le saluda atentamente :").font = font_normal
     
-    # Ancho exacto de columnas para evitar recortes de texto
+    # Ancho de columnas para evitar cortes de texto
     ws.column_dimensions['A'].width = 14
     ws.column_dimensions['B'].width = 14
     ws.column_dimensions['C'].width = 46
@@ -253,7 +252,6 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("📦 Fotos de los Productos")
-    # CARGADOR MÚLTIPLE DE OPCIÓN C:
     fotos_productos = st.file_uploader(
         "Sube las fotos de ESTA cotización (Nómbralas con su código, ej: YT09511.jpg)", 
         type=["png", "jpg", "jpeg"], 
@@ -327,8 +325,7 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response = model.generate_content([prompt_extraccion, imagen_lista])
-            texto_limpio = response.text.strip().replace("
-```json", "").replace("```", "")
+            texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
             
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
@@ -387,8 +384,7 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response_resolucion = model.generate_content(prompt_resolucion)
-            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("
-```", "")
+            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("```", "")
             
             datos_finales = json.loads(texto_resolucion)
             resultados_lista = datos_finales.get("resultados", [])
@@ -396,7 +392,8 @@ if archivo_excel and imagen_pedido and api_key:
             cotizacion_final = []
             for res in resultados_lista:
                 origen = res.get("busqueda_original", "")
-                cant = int(cantidades_dict.get(origen, 1))
+                cant_val = cantidades_dict.get(origen, 1)
+                cant = int(cant_val) if cant_val is not None else 1
                 px_lista = float(res.get("precio_elegido", 0.0))
                 desc = res.get("descripcion_elegida", "❌ NO ENCONTRADO")
                 cod = res.get("codigo_elegido", "MANUAL")
@@ -442,11 +439,11 @@ if archivo_excel and imagen_pedido and api_key:
                 
                 st.markdown("---")
                 
-                # Procesar diccionario de imágenes de productos subidas en la barra lateral
+                # Procesar fotos de productos subidas de manera robusta
                 dict_imagenes_procesadas = {}
                 if fotos_productos:
                     for foto in fotos_productos:
-                        nombre_id = foto.name.split(".")[0].strip().lower()
+                        nombre_id = os.path.splitext(foto.name)[0].strip().lower()
                         dict_imagenes_procesadas[nombre_id] = foto.getvalue()
                 
                 # Obtención de bytes de logo si existe
