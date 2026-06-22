@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Imágenes Express)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Servidor Liviano)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -259,30 +259,43 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    with st.expander("⚙️ Verificación de Columnas Catálogo", expanded=False):
+    with st.expander("⚙️ Autenticación de Motor", expanded=False):
         api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
 
-# Cuadrícula principal de carga de archivos
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("1. Sube tu catálogo de precios (.xlsx)")
-    archivo_excel = st.file_uploader("Selecciona el archivo Excel de precios", type=["xlsx"])
-with col2:
-    st.subheader("2. Sube el pantallazo de la solicitud")
-    imagen_pedido = st.file_uploader("Selecciona la imagen del pedido", type=["png", "jpg", "jpeg"])
+# Cuadrícula principal de carga de requerimientos (Ya no pide el catálogo manual)
+st.subheader("1. Sube el pantallazo de la solicitud del cliente")
+imagen_pedido = st.file_uploader("Selecciona la imagen del pedido o correo", type=["png", "jpg", "jpeg"])
 
-# Procesamiento Inteligente mediante Motor RAG Cruzado
-if archivo_excel and imagen_pedido and api_key:
+# MOTOR DE CARGA DEL CATÁLOGO DESDE EL SERVIDOR (Cambio de Excel a tu nuevo CSV)
+RUTA_CATALOGO = "lista_vigente.csv"
+df_catalogo = None
+
+if os.path.exists(RUTA_CATALOGO):
+    try:
+        # Intentamos con punto y coma (común en Excel de Latinoamérica)
+        df_catalogo = pd.read_csv(RUTA_CATALOGO, sep=";")
+        if df_catalogo.shape[1] <= 1:
+            df_catalogo = pd.read_csv(RUTA_CATALOGO, sep=",")
+        st.success(f"✅ Cerebro comercial '{RUTA_CATALOGO}' cargado dinámicamente desde el servidor.")
+    except Exception as e:
+        st.error(f"❌ Error crítico leyendo la lista CSV: {e}")
+        st.stop()
+else:
+    st.error(f"❌ No se encontró el archivo '{RUTA_CATALOGO}' en GitHub. Por favor, súbelo para activar la app.")
+    st.stop()
+
+# Procesamiento Inteligente mediante RAG cruzado de datos
+if df_catalogo is not None and imagen_pedido and api_key:
     if st.button("🔥 Generar Cotización Excel Inteligente"):
         try:
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
             st.info("🔄 Fase 1: Leyendo imagen de solicitud e interpretando requerimientos...")
-            df = pd.read_excel(archivo_excel, header=1)
+            df = df_catalogo.copy()
             df.columns = [str(c).strip() for c in df.columns]
             
-            # Autodetección milimétrica de columnas en el archivo de precios
+            # Autodetección milimétrica de las columnas del CSV histórico
             columnas_disponibles = list(df.columns)
             idx_cod = next((i for i, c in enumerate(columnas_disponibles) if 'cod' in c.lower() or 'id' in c.lower()), 0)
             idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 1)
@@ -364,9 +377,9 @@ if archivo_excel and imagen_pedido and api_key:
                     
                 candidates_rag[termino] = cand_list
 
-            st.info("🔄 Fase 3: Resolviendo códigos y cruzando marcas directamente desde tu catálogo...")
+            st.info("🔄 Fase 3: Resolviendo códigos y asignando marcas nativas...")
             prompt_resolucion = f"""
-            Actúas como un expert en herramientas industriales para la empresa VGM SpA.
+            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN:
@@ -410,7 +423,7 @@ if archivo_excel and imagen_pedido and api_key:
                 px_lista = float(res.get("precio_elegido", 0.0))
                 marca = "YATO/VOREL"
                 
-                # CRUCE DE DATOS EN TIEMPO REAL: Extrae la marca original directo desde tu archivo cargado
+                # CRUCE DE DATOS DESDE EL MODELO LOCAL (Cerebro CSV)
                 if cod != "MANUAL":
                     cod_norm = normalizar_texto(cod)
                     match_rows = df[df['__cod_clean'] == cod_norm]
@@ -424,7 +437,7 @@ if archivo_excel and imagen_pedido and api_key:
                         if col_marca and col_marca in df.columns and not pd.isna(r_match[col_marca]):
                             marca = str(r_match[col_marca]).strip().upper()
                 
-                # Regla dura para la linterna de cabeza de marca corporativa
+                # Resguardo duro para linternas corporativas IRIMO
                 if cod.upper() == "L-HEAD-1" or "HEAD" in desc.upper() or "CABEZA" in desc.upper():
                     marca = "IRIMO"
                 
@@ -470,14 +483,13 @@ if archivo_excel and imagen_pedido and api_key:
                 
                 st.markdown("---")
                 
-                # Procesar fotos de productos subidas en la interfaz de la barra lateral
+                # Estructurar fotos express cargadas en barra lateral
                 dict_imagenes_procesadas = {}
                 if fotos_productos:
                     for foto in fotos_productos:
                         nombre_id = os.path.splitext(foto.name)[0].strip().lower()
                         dict_imagenes_procesadas[nombre_id] = foto.getvalue()
                 
-                # Obtención de bytes de logo si existe
                 logo_data = logo_empresa.getvalue() if logo_empresa else None
                 
                 excel_binario = generar_excel_comercial(
@@ -497,4 +509,4 @@ if archivo_excel and imagen_pedido and api_key:
         except Exception as e:
             st.error(f"Error en el motor de automatización: {e}")
 else:
-    st.info("Ingresa tu Gemini API Key y carga el catálogo junto al pedido para activar el generador.")
+    st.info("Por favor ingresa tu Gemini API Key y carga el pantallazo para operar.")
