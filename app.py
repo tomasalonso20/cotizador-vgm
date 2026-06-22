@@ -218,7 +218,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     fila_actual += 1
     
-    # CORREGIDO: "Condiciones" en español impecable
     ws.cell(row=fila_actual, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
     ws.cell(row=fila_actual, column=7, value="VGM SpA").font = font_negrita
     ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
@@ -262,9 +261,6 @@ with st.sidebar:
     st.markdown("---")
     with st.expander("⚙️ Verificación de Columnas Catálogo", expanded=False):
         api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
-        col_codigo = "CODIGO"
-        col_desc = "DESCRIPCION"
-        col_precio = "PRECIO UNITARIO NETO"
 
 # Cuadrícula principal de carga
 col1, col2 = st.columns(2)
@@ -274,17 +270,6 @@ with col1:
 with col2:
     st.subheader("2. Sube el pantallazo de la solicitud")
     imagen_pedido = st.file_uploader("Selecciona la imagen del pedido", type=["png", "jpg", "jpeg"])
-
-if archivo_excel:
-    try:
-        df_preview = pd.read_excel(archivo_excel, header=1, nrows=5)
-        columnas_disponibles = [str(c).strip() for c in df_preview.columns]
-        idx_cod = next((i for i, c in enumerate(columnas_disponibles) if 'cod' in c.lower() or 'id' in c.lower()), 0)
-        idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 1)
-        idx_precio = next((i for i, c in enumerate(columnas_disponibles) if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), len(columnas_disponibles) - 1)
-        col_codigo, col_desc, col_precio = columnas_disponibles[idx_cod], columnas_disponibles[idx_desc], columnas_disponibles[idx_precio]
-    except Exception as e:
-        st.sidebar.error(f"Error al mapear columnas: {e}")
 
 # Procesamiento Inteligente
 if archivo_excel and imagen_pedido and api_key:
@@ -296,13 +281,26 @@ if archivo_excel and imagen_pedido and api_key:
             st.info("🔄 Fase 1: Leyendo imagen de solicitud e interpretando requerimientos...")
             df = pd.read_excel(archivo_excel, header=1)
             df.columns = [str(c).strip() for c in df.columns]
+            
+            # Mapeo y autodetección robusta de columnas (incluida la Marca)
+            columnas_disponibles = list(df.columns)
+            idx_cod = next((i for i, c in enumerate(columnas_disponibles) if 'cod' in c.lower() or 'id' in c.lower()), 0)
+            idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 1)
+            idx_precio = next((i for i, c in enumerate(columnas_disponibles) if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), len(columnas_disponibles) - 1)
+            idx_marca = next((i for i, c in enumerate(columnas_disponibles) if 'mar' in c.lower() or 'bra' in c.lower() or 'fab' in c.lower()), -1)
+            
+            col_codigo = columnas_disponibles[idx_cod]
+            col_desc = columnas_disponibles[idx_desc]
+            col_precio = columnas_disponibles[idx_precio]
+            col_marca = columnas_disponibles[idx_marca] if idx_marca != -1 else None
+            
             df['__desc_clean'] = df[col_desc].apply(normalizar_texto)
             df['__cod_clean'] = df[col_codigo].apply(normalizar_texto)
             
             imagen_lista = Image.open(imagen_pedido)
             
             prompt_extraccion = """
-            Analiza detalladamente esta imagen de pedido. Extrae cada producto solicitado y su cantidad.
+            Analiza detalladamente esta imagen de pedido o correo de solicitud. Extrae cada producto solicitado y su cantidad.
             Además, para cada producto genera una lista de 4 a 6 sinónimos o términos técnicos comerciales en español que se usen comúnmente en los catálogos de herramientas industriales.
             
             CRÍTICO PARA LA EXPANSIÓN:
@@ -326,7 +324,8 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response = model.generate_content([prompt_extraccion, imagen_lista])
-            texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
+            texto_limpio = response.text.strip().replace("
+```json", "").replace("```", "")
             
             datos_pedido = json.loads(texto_limpio)
             lista_productos = datos_pedido.get("productos", [])
@@ -353,30 +352,40 @@ if archivo_excel and imagen_pedido and api_key:
                 df['__tmp_score'] = df.apply(score_prefiltrado, axis=1)
                 df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(40)
                 
-                candidates_rag[termino] = [{"codigo": str(r[col_codigo]), "descripcion": str(r[col_desc]), "precio": float(limpiar_precio(r[col_precio]))} for _, r in df_filtrado.iterrows()]
+                cand_list = []
+                for _, r in df_filtrado.iterrows():
+                    c_dict = {
+                        "codigo": str(r[col_codigo]), 
+                        "descripcion": str(r[col_desc]), 
+                        "precio": float(limpiar_precio(r[col_precio]))
+                    }
+                    if col_marca:
+                        c_dict["marca"] = str(r[col_marca])
+                    cand_list.append(c_dict)
+                    
+                candidates_rag[termino] = cand_list
 
-            st.info("🔄 Fase 3: Homologando códigos y marcas del catálogo...")
+            st.info("🔄 Fase 3: Homologando códigos mediante Inteligencia Artificial...")
             prompt_resolucion = f"""
             Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN:
-            1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. La marca es 'YATO'. NO elijas pistolas para inflar neumáticos (YT2370).
-            2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'. La marca es 'YATO'.
-            3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518. LA MARCA EXCLUSIVA PARA ESTE PRODUCTO DEBE SER 'IRIMO'.
-            4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'. Marca 'YATO'.
-            5. FILTRO ESTRICTO NO ENCONTRADO: Si no calza, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0, 'marca_elegida': 'YATO/VOREL'.
+            1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
+            2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
+            3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
+            4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
+            5. FILTRO ESTRICTO NO ENCONTRADO: Si no calza, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
             
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             {json.dumps(candidates_rag, ensure_ascii=False, indent=2)}
             
-            Devuelve ÚNICAMENTE un JSON estructurado de la siguiente forma, sin bloques markdown ni texto adicional:
+            Devuelve ÚNICAMENTE un JSON structured de la siguiente forma, sin bloques markdown ni texto adicional:
             {{
                 "resultados": [
                     {{
                         "busqueda_original": "nombre exacto de la busqueda original",
                         "codigo_elegido": "código real del catálogo o 'MANUAL'",
-                        "marca_elegida": "IRIMO, YATO o VOREL según corresponda de forma exacta",
                         "descripcion_elegida": "descripción exacta del catálogo o '❌ NO ENCONTRADO'",
                         "precio_elegido": 12345.0,
                         "coincidencia_exacta": true o false
@@ -386,7 +395,8 @@ if archivo_excel and imagen_pedido and api_key:
             """
             
             response_resolucion = model.generate_content(prompt_resolucion)
-            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("```", "")
+            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("
+```", "")
             
             datos_finales = json.loads(texto_resolucion)
             resultados_lista = datos_finales.get("resultados", [])
@@ -396,18 +406,35 @@ if archivo_excel and imagen_pedido and api_key:
                 origen = res.get("busqueda_original", "")
                 cant_val = cantidades_dict.get(origen, 1)
                 cant = int(cant_val) if cant_val is not None else 1
-                px_lista = float(res.get("precio_elegido", 0.0))
-                desc = str(res.get("descripcion_elegida", "❌ NO ENCONTRADO"))
-                cod = res.get("codigo_elegido", "MANUAL")
-                marca = str(res.get("marca_elegida", "YATO/VOREL")).strip().upper()
                 
-                # Regla de seguridad dura para la marca de la linterna de cabeza
-                if cod.strip().upper() == "L-HEAD-1" or "HEAD" in desc.upper() or "CABEZA" in desc.upper():
+                # Respaldo inicial desde la resolución del LLM
+                cod = str(res.get("codigo_elegido", "MANUAL")).strip()
+                desc = str(res.get("descripcion_elegida", "❌ NO ENCONTRADO"))
+                px_lista = float(res.get("precio_elegido", 0.0))
+                marca = "YATO/VOREL" # Default base
+                
+                # CRUCE EXACTO CON BASE DE DATOS (EXCEL): Extraemos la verdad directo del archivo
+                if cod != "MANUAL":
+                    cod_norm = normalizar_texto(cod)
+                    match_rows = df[df['__cod_clean'] == cod_norm]
+                    if match_rows.empty:
+                        match_rows = df[df[col_codigo].astype(str).str.strip().str.lower() == cod.lower()]
+                        
+                    if not match_rows.empty:
+                        r_match = match_rows.iloc[0]
+                        desc = str(r_match[col_desc])
+                        px_lista = float(limpiar_precio(r_match[col_precio]))
+                        if col_marca and col_marca in df.columns:
+                            marca = str(r_match[col_marca]).strip().upper()
+                
+                # Regla de seguridad dura para la marca de la linterna de cabeza corporativa
+                if cod.upper() == "L-HEAD-1" or "HEAD" in desc.upper() or "CABEZA" in desc.upper():
                     marca = "IRIMO"
                 
                 if cod == "MANUAL" or "❌" in desc:
                     desc = f"❌ NO ENCONTRADO: (Falta en catálogo o requiere código manual para '{origen}')"
                     px_lista = 0.0
+                    marca = "MANUAL"
                 elif not res.get("coincidencia_exacta", True):
                     desc = f"⚠️ (Match sugerido) {desc}"
                 
