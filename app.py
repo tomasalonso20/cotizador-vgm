@@ -111,6 +111,7 @@ if archivo_excel and imagen_pedido and api_key:
             CRÍTICO PARA LA EXPANSIÓN:
             - Si detectas 'Pistola neumática' o similar, incluye obligatoriamente: 'llave impacto', 'neumatica', 'aire', 'cuadrante', '550', 'std'.
             - Si detectas 'Linterna imantada' o similar, incluye obligatoriamente: 'lampara trabajo', 'iman', 'led', 'funcional', 'cob'.
+            - Si detectas 'Linterna led de cabeza', 'linterna de cabeza', 'lampara de cabeza' o 'frontal', incluye obligatoriamente: 'l-head-1', 'l_head_1', 'cabeza', 'frontal', 'cintillo'. NO agregues el término 'imantada'.
             - Si detectas 'Correas multinervadas' o 'elasticas', incluye obligatoriamente: 'extractor', 'instalador', 'montaje', 'desmontaje', 'correa', 'puesta punto'.
             - Si detectas 'Llave de impacto inalámbrica' o similar, incluye obligatoriamente: 'yt8277935', 'yt8277925', 'bateria', 'inalambrico', 'torque'.
             
@@ -176,7 +177,7 @@ if archivo_excel and imagen_pedido and api_key:
                 
                 df['__tmp_score'] = df.apply(score_prefiltrado, axis=1)
                 
-                # AMPLIACIÓN CRÍTICA: Subimos a 40 candidatos para asegurar que las llaves de impacto no queden fuera
+                # AMPLIACIÓN CRÍTICA: Subimos a 40 candidatos para asegurar que los códigos específicos no queden fuera
                 df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(40)
                 
                 lista_candidatos = []
@@ -191,18 +192,19 @@ if archivo_excel and imagen_pedido and api_key:
             st.info("🔄 Fase 3: Resolviendo ambigüedades con homologación experta de catálogo...")
             
             prompt_resolucion = f"""
-            Actúas como un expert en repuestos y herramientas industriales para la empresa VGM SpA. 
+            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN:
             1. PISTOLAS NEUMÁTICAS: Si el cliente pide una "Pistola Neumática" o "Pistola de impacto" de aire estándar, comercialmente esto corresponde a las Llaves de Impacto de aire. El código estándar de nuestro catálogo es 'YT09511' (Llave Impacto std. 1/2). Si viene en los candidatos, selecciónalo de forma prioritaria. NO elijas pistolas para inflar neumáticos (YT2370) ni de engrasar (PT206) a menos que se pida textualmente inflar o engrasar.
-            2. LINTERNAS LARGAS / IMANTADAS: El código predilecto para promociones de linternas de trabajo profesionales con imán es el 'YT08518'. Si aparece en tus candidatos, elígelo.
-            3. HERRAMIENTAS DE CORREAS ELÁSTICAS: Si el cliente pide un kit para montaje/desmontaje de correas elásticas o multinervadas, revisa minuciosamente si hay algún extractor o llave especializada para correas. Si el catálogo tiene herramientas genéricas que no corresponden a un kit de calado o montaje de correas, pon 'MANUAL'.
-            4. LLAVES DE IMPACTO INALÁMBRICAS: Cuando el pedido mencione una "llave de impacto inalámbrica" (o a batería, inalámbrico) sin detallar un código explícito, debes priorizar obligatoriamente estos dos códigos en este estricto orden de preferencia:
+            2. LINTERNAS LARGAS / IMANTADAS: El código predilecto para promociones de linternas de trabajo profesionales con imán es el 'YT08518'. Si aparece en tus candidatos, elígelo únicamente si piden linternas magnéticas, imantadas o lámparas de taller portátiles.
+            3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): Si el cliente pide una "linterna led de cabeza", "linterna de cabeza", "lámpara de cabeza" o "frontal", bajo ninguna circunstancia elijas una linterna imantada o lámpara de taller (como YT08518). El código exacto asignado a este producto es 'L-HEAD-1'. Si este código aparece en tus candidatos, elígelo de forma obligatoria y prioritaria.
+            4. HERRAMIENTAS DE CORREAS ELÁSTICAS: Si el cliente pide un kit para montaje/desmontaje de correas elásticas o multinervadas, revisa minuciosamente si hay algún extractor o llave especializada para correas. Si el catálogo tiene herramientas genéricas que no corresponden a un kit de calado o montaje de correas, pon 'MANUAL'.
+            5. LLAVES DE IMPACTO INALÁMBRICAS: Cuando el pedido mencione una "llave de impacto inalámbrica" (o a batería, inalámbrico) sin detallar un código explícito, debes priorizar obligatoriamente estos dos códigos en este estricto orden de preferencia:
                - 1ra Opción (Preferencia Absoluta): Código 'YT8277935'
                - 2da Opción (Alternativa): Código 'YT8277925'
                NO elijas el modelo industrial YT828073 u otros códigos similares a menos que el cliente pida textualmente un torque gigante de 2400NM o un cuadrante de 3/4". De lo contrario, quédate siempre con las dos prioridades de arriba.
-            5. FILTRO ESTRICTO NO ENCONTRADO: Si ningún candidato coincide lógicamente con lo pedido, marca obligatoriamente 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
+            6. FILTRO ESTRICTO NO ENCONTRADO: Si ningún candidato coincide lógicamente con lo pedido, marca obligatoriamente 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
             
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             {json.dumps(candidates_rag, ensure_ascii=False, indent=2)}
