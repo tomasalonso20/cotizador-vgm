@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Servidor Liviano)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Cerebro Comercial Integrado)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -63,10 +63,8 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws = wb.active
     ws.title = "Cotización"
     
-    # Asegurar líneas de cuadrícula visibles
     ws.views.sheetView[0].showGridLines = True
     
-    # Estilos de Tipografía y Colores Corporativos
     font_titulo = Font(name="Arial", size=12, bold=True, color="1F497D")
     font_cabecera_tabla = Font(name="Arial", size=10, bold=True, color="FFFFFF")
     font_negrita = Font(name="Arial", size=10, bold=True)
@@ -81,12 +79,10 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         top=Side(style='thin', color='BFBFBF'), bottom=Side(style='thin', color='BFBFBF')
     )
     
-    # Fila 1: Fecha de emisión alineada a la derecha en columna G
     ws["G1"] = f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}"
     ws["G1"].font = font_negrita
     ws["G1"].alignment = Alignment(horizontal="right")
     
-    # Soporte e inserción de Logo Corporativo en A1
     if logo_bytes:
         try:
             img_stream = io.BytesIO(logo_bytes)
@@ -97,7 +93,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         except:
             pass
             
-    # Estructura de Encabezados (Idéntica a tu formato base)
     ws["A3"] = f"COTIZACIÓN N°{nro_cotiz}"
     ws["A3"].font = font_titulo
     
@@ -113,10 +108,9 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"
     ws["A7"].font = font_negrita
     
-    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra proposal:"
+    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
     ws["A8"].font = font_normal
     
-    # Títulos de Columnas Oficiales
     titulos_columnas = ["CODIGO", "MARCA", "DESCRIPCIÓN", "PRECIO UNITARIO NETO", "CANTIDAD", "PRECIO UNITARIO TOTAL", "IMAGEN REFERENCIAL"]
     fila_tabla_inicio = 10
     
@@ -128,7 +122,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         celda.border = borde_delgado
     ws.row_dimensions[fila_tabla_inicio].height = 28
     
-    # Volcado de productos con marcas dinámicas extraídas desde la fuente original
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
         cod_original = str(fila["Código"])
@@ -148,7 +141,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
-        # Inserción de la foto si fue cargada en la App
         ws.cell(row=fila_actual, column=7, value="").alignment = Alignment(horizontal="center", vertical="center")
         if dict_imagenes and cod_limpio in dict_imagenes:
             try:
@@ -168,7 +160,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         ws.row_dimensions[fila_actual].height = 65  
         fila_actual += 1
         
-    # Cierre de Totales Comerciales
     ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
     
     celda_lbl_sub = ws.cell(row=fila_actual, column=5, value="SUBTOTAL")
@@ -225,7 +216,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     ws.cell(row=fila_actual, column=1, value="A la espera de sus comentarios, le saluda atentamente :").font = font_normal
     
-    # Ancho de columnas óptimo para evitar textos cortados
     ws.column_dimensions['A'].width = 14
     ws.column_dimensions['B'].width = 14
     ws.column_dimensions['C'].width = 46
@@ -262,11 +252,10 @@ with st.sidebar:
     with st.expander("⚙️ Autenticación de Motor", expanded=False):
         api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
 
-# Cuadrícula principal de carga de requerimientos (Ya no pide el catálogo manual)
 st.subheader("1. Sube el pantallazo de la solicitud del cliente")
 imagen_pedido = st.file_uploader("Selecciona la imagen del pedido o correo", type=["png", "jpg", "jpeg"])
 
-# MOTOR DE CARGA INTELIGENTE Y TOLERANTE A CSV LATINOAMERICANOS
+# MOTOR DE CARGA: LECTURA DEL CATÁLOGO BASE VIGENTE
 RUTA_CATALOGO = "lista_vigente.csv"
 df_catalogo = None
 
@@ -274,7 +263,6 @@ if os.path.exists(RUTA_CATALOGO):
     encodings_a_probar = ['utf-8', 'latin1', 'iso-8859-1', 'utf-8-sig', 'cp1252']
     delimitadores_a_probar = [';', ',']
     exito_lectura = False
-    
     for enc in encodings_a_probar:
         for sep in delimitadores_a_probar:
             try:
@@ -285,23 +273,40 @@ if os.path.exists(RUTA_CATALOGO):
                     break
             except:
                 continue
-        if exito_lectura:
-            break
+        if exito_lectura: break
             
     if exito_lectura and df_catalogo is not None:
-        st.success(f"✅ Cerebro comercial '{RUTA_CATALOGO}' cargado dinámicamente desde el servidor.")
+        st.success(f"✅ Cerebro comercial '{RUTA_CATALOGO}' cargado dinámicamente.")
     else:
-        try:
-            df_catalogo = pd.read_csv(RUTA_CATALOGO, sep=None, engine='python')
-            st.success(f"✅ Cerebro comercial '{RUTA_CATALOGO}' cargado con motor alternativo.")
-        except Exception as e:
-            st.error(f"❌ Error crítico leyendo la lista CSV: {e}")
-            st.stop()
+        st.error(f"❌ Problema crítico al procesar la estructura de '{RUTA_CATALOGO}'.")
+        st.stop()
 else:
-    st.error(f"❌ No se encontró el archivo '{RUTA_CATALOGO}' en GitHub. Por favor, súbelo para activar la app.")
+    st.error(f"❌ Falta el archivo '{RUTA_CATALOGO}' en GitHub.")
     st.stop()
 
-# Procesamiento Inteligente mediante RAG cruzado de datos
+# MOTOR DE CARGA: LECTURA INTELIGENTE DEL CEREBRO HISTÓRICO DE VENTAS (2025-2026)
+RUTA_HISTORIAL = "historial_ventas.csv"
+df_historial = None
+
+if os.path.exists(RUTA_HISTORIAL):
+    exito_historial = False
+    for enc in ['utf-8', 'latin1', 'iso-8859-1', 'cp1252']:
+        for sep in [';', ',']:
+            try:
+                df_hist_test = pd.read_csv(RUTA_HISTORIAL, sep=sep, encoding=enc)
+                if df_hist_test.shape[1] > 1:
+                    df_historial = df_hist_test
+                    exito_historial = True
+                    break
+            except:
+                continue
+        if exito_historial: break
+    if exito_historial:
+        st.info("🧠 Cerebro Histórico (Ventas 2025-2026) conectado y listo para asistir en precios.")
+else:
+    st.warning("⚠️ Historial 'historial_ventas.csv' no detectado. El sistema operará sin asistencia histórica.")
+
+# Procesamiento Inteligente
 if df_catalogo is not None and imagen_pedido and api_key:
     if st.button("🔥 Generar Cotización Excel Inteligente"):
         try:
@@ -310,8 +315,9 @@ if df_catalogo is not None and imagen_pedido and api_key:
             
             st.info("🔄 Fase 1: Leyendo imagen de solicitud e interpretando requerimientos...")
             df = df_catalogo.copy()
+            df.columns = [str(c).strip() for c in df.columns]
             
-            # Limpieza dinámica de cabeceras por si quedaron filas de títulos vacías arriba en el CSV
+            # Limpieza dinámica de cabeceras redundantes
             columnas_limpias = [str(c).strip() for c in df.columns]
             if not any('cod' in c.lower() or 'desc' in c.lower() or 'prec' in c.lower() for c in columnas_limpias):
                 for i in range(min(5, len(df))):
@@ -322,9 +328,8 @@ if df_catalogo is not None and imagen_pedido and api_key:
                         break
             
             df.columns = [str(c).strip() for c in df.columns]
-            
-            # Autodetección milimétrica de las columnas mapeadas
             columnas_disponibles = list(df.columns)
+            
             idx_cod = next((i for i, c in enumerate(columnas_disponibles) if 'cod' in c.lower() or 'id' in c.lower()), 0)
             idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 1)
             idx_precio = next((i for i, c in enumerate(columnas_disponibles) if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), len(columnas_disponibles) - 1)
@@ -405,7 +410,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
                     
                 candidates_rag[termino] = cand_list
 
-            st.info("🔄 Fase 3: Resolviendo códigos y asignando marcas nativas...")
+            st.info("🔄 Fase 3: Resolviendo códigos y auditando historial comercial...")
             prompt_resolucion = f"""
             Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
@@ -451,7 +456,6 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 px_lista = float(res.get("precio_elegido", 0.0))
                 marca = "YATO/VOREL"
                 
-                # CRUCE DE DATOS EN TIEMPO REAL DESDE TU CSV LOCAL
                 if cod != "MANUAL":
                     cod_norm = normalizar_texto(cod)
                     match_rows = df[df['__cod_clean'] == cod_norm]
@@ -465,9 +469,29 @@ if df_catalogo is not None and imagen_pedido and api_key:
                         if col_marca and col_marca in df.columns and not pd.isna(r_match[col_marca]):
                             marca = str(r_match[col_marca]).strip().upper()
                 
-                # Resguardo duro para linternas corporativas IRIMO
                 if cod.upper() == "L-HEAD-1" or "HEAD" in desc.upper() or "CABEZA" in desc.upper():
                     marca = "IRIMO"
+                
+                # INTEGRACIÓN DEL CEREBRO DE VENTAS: Validación por cliente histórico
+                if df_historial is not None and cod != "MANUAL" and empresa_cliente:
+                    try:
+                        # Buscamos columnas del historial que se asimilen a Cliente y Código
+                        col_h_cli = next((c for c in df_historial.columns if 'cli' in c.lower() or 'emp' in c.lower() or 'raz' in c.lower()), df_historial.columns[0])
+                        col_h_cod = next((c for c in df_historial.columns if 'cod' in c.lower() or 'art' in c.lower() or 'pro' in c.lower()), df_historial.columns[1])
+                        col_h_px = next((c for c in df_historial.columns if 'prec' in c.lower() or 'net' in c.lower() or 'val' in c.lower() or 'vta' in c.lower()), df_historial.columns[-1])
+                        
+                        # Filtramos coincidencias semánticas del cliente
+                        term_emp = normalizar_texto(empresa_cliente)
+                        df_h_filtrado = df_historial[df_historial[col_h_cli].astype(str).apply(normalizar_texto).str.contains(term_emp, na=False)]
+                        
+                        # Buscamos si ya compró el código en cuestión
+                        match_hist_prod = df_h_filtrado[df_h_filtrado[col_h_cod].astype(str).str.strip().str.lower() == cod.lower()]
+                        
+                        if not match_hist_prod.empty:
+                            ultimo_precio_cobrado = float(limpiar_precio(match_hist_prod.iloc[-1][col_h_px]))
+                            desc = f"✨ [Historial: Cobrado ${ultimo_precio_cobrado:,.0f} antes] | " + desc
+                    except:
+                        pass
                 
                 if cod == "MANUAL" or "❌" in desc:
                     desc = f"❌ NO ENCONTRADO: (Falta en catálogo o requiere código manual para '{origen}')"
@@ -511,7 +535,6 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 
                 st.markdown("---")
                 
-                # Estructurar fotos express cargadas en barra lateral
                 dict_imagenes_procesadas = {}
                 if fotos_productos:
                     for foto in fotos_productos:
