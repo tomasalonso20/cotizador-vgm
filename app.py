@@ -56,7 +56,7 @@ def limpiar_precio(valor):
         except:
             return 0.0
 
-# FUNCIÓN MAESTRA: Escanea y detecta la cabecera real saltándose filas vacías o títulos del ERP
+# FUNCIÓN MAESTRA BLINDADA: Valida que existan al menos 2 columnas reales para evitar falsos positivos con títulos
 def leer_csv_tolerante(ruta_archivo):
     if not os.path.exists(ruta_archivo):
         return None
@@ -72,7 +72,9 @@ def leer_csv_tolerante(ruta_archivo):
                 fila_cabecera_idx = 0
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
-                    if 'cod' in line_low or 'desc' in line_low or 'prec' in line_low or 'art' in line_low:
+                    # Exigimos coincidencia múltiple para asegurar que es la fila de títulos reales
+                    coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
+                    if modificaciones >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -135,7 +137,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A6"] = f"Sr(a).: {cliente if cliente else 'No especificado'}"
     ws["A6"].font = font_negrita
     
-    ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"
+    ws["A7"] = f"Empresa: {empresa if empresa else 'No específica'}"
     ws["A7"].font = font_negrita
     
     ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
@@ -304,7 +306,7 @@ with st.sidebar:
 st.subheader("1. Sube el pantallazo de la solicitud del cliente")
 imagen_pedido = st.file_uploader("Selecciona la imagen del pedido o correo", type=["png", "jpg", "jpeg"])
 
-# MOTOR DE CARGA: LECTURA DEL CATÁLOGO BASE VIGENTE
+# MOTOR DE CARGA: LECTURA DEL CATÁLOGO BASE VIGENTE (Con filtro estricto anti-títulos)
 df_catalogo = leer_csv_tolerante("lista_vigente.csv")
 
 if df_catalogo is not None:
@@ -425,142 +427,4 @@ if df_catalogo is not None and imagen_pedido and api_key:
             2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
             3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
             4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
-            5. FILTRO ESTRICTO NO ENCONTRADO: Si no calza, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
-            
-            Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
-            {json.dumps(candidates_rag, ensure_ascii=False, indent=2)}
-            
-            Devuelve ÚNICAMENTE un JSON estructurado de la siguiente forma, sin bloques markdown ni texto adicional:
-            {{
-                "resultados": [
-                    {{
-                        "busqueda_original": "nombre exacto de la busqueda original",
-                        "codigo_elegido": "código real del catálogo o 'MANUAL'",
-                        "descripcion_elegida": "descripción exacta del catálogo o '❌ NO ENCONTRADO'",
-                        "precio_elegido": 12345.0,
-                        "coincidencia_exacta": true o false
-                    }}
-                ]
-            }}
-            """
-            
-            response_resolucion = model.generate_content(prompt_resolucion)
-            texto_resolucion = response_resolucion.text.strip().replace("```json", "").replace("```", "")
-            
-            datos_finales = json.loads(texto_resolucion)
-            resultados_lista = datos_finales.get("resultados", [])
-            
-            cotizacion_final = []
-            for res in resultados_lista:
-                origen = res.get("busqueda_original", "")
-                cant_val = cantidades_dict.get(origen, 1)
-                cant = int(cant_val) if cant_val is not None else 1
-                
-                cod = str(res.get("codigo_elegido", "MANUAL")).strip()
-                desc = str(res.get("descripcion_elegida", "❌ NO ENCONTRADO"))
-                px_lista = float(res.get("precio_elegido", 0.0))
-                marca = "YATO/VOREL"
-                
-                if cod != "MANUAL":
-                    cod_norm = normalizar_texto(cod)
-                    match_rows = df[df['__cod_clean'] == cod_norm]
-                    if match_rows.empty:
-                        match_rows = df[df[col_codigo].astype(str).str.strip().str.lower() == cod.lower()]
-                        
-                    if not match_rows.empty:
-                        r_match = match_rows.iloc[0]
-                        desc = str(r_match[col_desc])
-                        px_lista = float(limpiar_precio(r_match[col_precio]))
-                        if col_marca and col_marca in df.columns and not pd.isna(r_match[col_marca]):
-                            marca = str(r_match[col_marca]).strip().upper()
-                
-                if cod.upper() == "L-HEAD-1" or "HEAD" in desc.upper() or "CABEZA" in desc.upper():
-                    marca = "IRIMO"
-                
-                # AUDITORÍA MEDIANTE EL CEREBRO HISTÓRICO DE VENTAS
-                if df_historial is not None and cod != "MANUAL" and empresa_cliente:
-                    try:
-                        columnas_h = list(df_historial.columns)
-                        col_h_cli = next((c for c in columnas_h if 'cli' in c.lower() or 'emp' in c.lower() or 'raz' in c.lower() or 'nom' in c.lower()), columnas_h[0])
-                        col_h_cod = next((c for c in columnas_h if 'cod' in c.lower() or 'art' in c.lower() or 'pro' in c.lower()), columnas_h[1] if len(columnas_h) > 1 else columnas_h[0])
-                        col_h_px = next((c for c in columnas_h if 'prec' in c.lower() or 'net' in c.lower() or 'val' in c.lower() or 'vta' in c.lower() or 'tot' in c.lower()), columnas_h[-1])
-                        
-                        term_emp = normalizar_texto(empresa_cliente)
-                        df_h_filtrado = df_historial[df_historial[col_h_cli].astype(str).apply(normalizar_texto).str.contains(term_emp, na=False, regex=False)]
-                        match_hist_prod = df_h_filtrado[df_h_filtrado[col_h_cod].astype(str).str.strip().str.lower() == cod.lower()]
-                        
-                        if not match_hist_prod.empty:
-                            ultimo_precio_cobrado = float(limpiar_precio(match_hist_prod.iloc[-1][col_h_px]))
-                            desc = f"✨ [Historial ERP: Cobrado ${ultimo_precio_cobrado:,.0f} anteriormente] | " + desc
-                    except:
-                        pass
-                
-                if cod == "MANUAL" or "❌" in desc:
-                    desc = f"❌ NO ENCONTRADO: (Falta en catálogo o requiere código manual para '{origen}')"
-                    px_lista = 0.0
-                    marca = "MANUAL"
-                elif not res.get("coincidencia_exacta", True):
-                    desc = f"⚠️ (Match sugerido) {desc}"
-                
-                precio_manual_val = limpiar_precio(precio_manual_input)
-                if descuento_aplicar == 0 and precio_manual_val > 0 and cod != "MANUAL":
-                    px_final_neto = precio_manual_val
-                    texto_descuento_col = "Precio Especial"
-                else:
-                    px_final_neto = px_lista - (px_lista * (descuento_aplicar / 100))
-                    texto_descuento_col = f"{descuento_aplicar}%"
-                    
-                cotizacion_final.append({
-                    "Código": cod, "Marca": marca, "Descripción Catálogo": desc, "Cantidad": cant,
-                    "Precio Lista (Neto)": px_lista, "Descuento Aplicado": texto_descuento_col,
-                    "Precio Final (Neto)": px_final_neto, "Total Neto": px_final_neto * cant
-                })
-                
-            if cotizacion_final:
-                df_resultado = pd.DataFrame(cotizacion_final)
-                st.success("¡Cotización construida exitosamente!")
-                st.dataframe(df_resultado, use_container_width=True)
-                
-                subtotal_lista = (df_resultado["Precio Lista (Neto)"] * df_resultado["Cantidad"]).sum()
-                total_neto_final = df_resultado["Total Neto"].sum()
-                descuento_total_pesos = max(subtotal_lista - total_neto_final, 0.0)
-                iva_calculado = total_neto_final * 0.19
-                total_bruto = total_neto_final + iva_calculado
-                
-                st.markdown("### 📊 Desglose Económico de la Operación")
-                c_neto, c_desc, c_neto_f, c_iva, c_bruto = st.columns(5)
-                c_neto.metric(label="Total Lista Neto", value=f"${subtotal_lista:,.0f}")
-                c_desc.metric(label="Descuento Otorgado", value=f"-${descuento_total_pesos:,.0f}")
-                c_neto_f.metric(label="Neto Final Cliente", value=f"${total_neto_final:,.0f}")
-                c_iva.metric(label="IVA (19%)", value=f"${iva_calculado:,.0f}")
-                c_bruto.metric(label="Total Bruto", value=f"${total_bruto:,.0f}")
-                
-                st.markdown("---")
-                
-                dict_imagenes_procesadas = {}
-                if fotos_productos:
-                    for foto in fotos_productos:
-                        nombre_id = os.path.splitext(foto.name)[0].strip().lower()
-                        dict_imagenes_procesadas[nombre_id] = foto.getvalue()
-                
-                # Priorizar logo subido manualmente, si no, usar el logo automático de GitHub
-                logo_data = logo_empresa.getvalue() if logo_empresa else logo_bytes
-                
-                excel_binario = generar_excel_comercial(
-                    df_resultado, nombre_cliente, empresa_cliente, numero_folio, 
-                    total_neto_final, iva_calculado, total_bruto, logo_data, dict_imagenes_procesadas
-                )
-                
-                st.download_button(
-                    label="🟢 Descargar Documento Excel Premium (.xlsx)", 
-                    data=excel_binario, 
-                    file_name=f"Cotizacion_{numero_folio}.xlsx", 
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-            else:
-                st.warning("No se logró procesar ningún ítem.")
-        except Exception as e:
-            st.error(f"Error en el motor de automatización: {e}")
-else:
-    st.info("Por favor carga el pantallazo del pedido para operar.")
+            5. FILTRO ESTRICTO NO ENCONTRADO: Si no calza, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCON
