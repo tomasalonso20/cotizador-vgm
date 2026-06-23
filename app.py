@@ -15,7 +15,7 @@ from fpdf import FPDF
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Omni-Canal con PDF Premium)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Omni-Canal Premium)")
 
 # Inicializar estados de memoria para evitar que se borren los datos al hacer clic en descargas
 if 'df_resultado' not in st.session_state:
@@ -85,7 +85,7 @@ def leer_csv_tolerante(ruta_archivo):
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if coincidencias >= 2:
+                    if modificaciones := coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -99,41 +99,64 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN: Generación de PDF Oficial Compacto, Limpio y Elegante
-def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto):
+# FUNCIÓN: Generación de PDF Comercial Oficial idéntico al Excel corporativo
+def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
     
-    pdf.set_font("helvetica", "B", 15)
+    # Inyección del Logo Corporativo VGM si existe en memoria
+    if logo_bytes:
+        try:
+            pdf.image(io.BytesIO(logo_bytes), x=10, y=10, w=38)
+        except:
+            pass
+            
+    # Fecha alineada a la derecha de la cabecera
+    pdf.set_font("helvetica", "B", 10)
+    pdf.cell(0, 5, f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}", ln=True, align="R")
+    pdf.ln(6)
+    
+    # Título oficial con tamaño 16 y color azul corporativo idéntico al Excel (1F497D -> RGB: 31, 73, 125)
+    pdf.set_font("helvetica", "B", 16)
+    pdf.set_text_color(31, 73, 125)
     pdf.cell(0, 10, f"COTIZACIÓN N° {nro_cotiz}", ln=True, align="C")
     pdf.ln(4)
     
+    # Reset del color de texto a negro estándar
+    pdf.set_text_color(0, 0, 0)
+    
+    # Datos de la Empresa emisora (VGM SpA)
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(0, 5, "VGM SpA", ln=True)
+    pdf.cell(0, 5, "76.834.968-1", ln=True)
     pdf.set_font("helvetica", "", 10)
-    pdf.cell(0, 5, "RUT: 76.834.968-1", ln=True)
-    pdf.cell(0, 5, "Dirección: Chopin 2848, San Joaquín, Santiago", ln=True)
-    pdf.cell(0, 5, f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}", ln=True)
-    pdf.ln(4)
+    pdf.cell(0, 5, "Chopin 2848. San Joaquín. Santiago", ln=True)
+    pdf.ln(3)
     
+    # Datos del Cliente receptors
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(0, 5, f"Cliente: {cliente if cliente else 'No especificado'}", ln=True)
+    pdf.cell(0, 5, f"Sr(a).: {cliente if cliente else 'No especificado'}", ln=True)
     pdf.cell(0, 5, f"Empresa: {empresa if empresa else 'No especificada'}", ln=True)
+    pdf.ln(3)
+    
+    pdf.set_font("helvetica", "", 10)
+    pdf.cell(0, 5, "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:", ln=True)
     pdf.ln(4)
     
-    # Encabezados de la Tabla PDF
+    # Encabezados de la Tabla PDF (Mismo azul oficial Excel: 365F91 -> RGB: 54, 95, 145)
     pdf.set_font("helvetica", "B", 9)
     pdf.set_fill_color(54, 95, 145) 
     pdf.set_text_color(255, 255, 255)
     
-    pdf.cell(22, 8, "CÓDIGO", border=1, align="C", fill=True)
-    pdf.cell(23, 8, "MARCA", border=1, align="C", fill=True)
-    pdf.cell(80, 8, "DESCRIPCIÓN", border=1, align="C", fill=True)
-    pdf.cell(25, 8, "P. UNIT NETO", border=1, align="C", fill=True)
-    pdf.cell(15, 8, "CANT", border=1, align="C", fill=True)
-    pdf.cell(25, 8, "TOTAL NETO", border=1, align="C", fill=True)
+    # Ajuste de anchos para cuadrar los 190mm útiles de la página A4
+    pdf.cell(24, 8, "CÓDIGO", border=1, align="C", fill=True)
+    pdf.cell(24, 8, "MARCA", border=1, align="C", fill=True)
+    pdf.cell(72, 8, "DESCRIPCIÓN", border=1, align="C", fill=True)
+    pdf.cell(28, 8, "P. UNIT NETO", border=1, align="C", fill=True)
+    pdf.cell(14, 8, "CANT", border=1, align="C", fill=True)
+    pdf.cell(28, 8, "TOTAL NETO", border=1, align="C", fill=True)
     pdf.ln(8)
     
+    # Filas de los productos cotizados
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("helvetica", "", 9)
     
@@ -142,49 +165,62 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
         marca = str(fila["Marca"])
         desc = str(fila["Descripción Catálogo"]).replace("✨ [Historial] ", "").replace("⚠️ (Match sugerido) ", "")
         
-        # Filtro de protección contra caracteres especiales/emojis
+        # Escudo de codificación para evitar caídas por emojis o acentos raros
         desc = desc.encode('latin-1', 'ignore').decode('latin-1')
         p_unit = f"${float(fila['Precio Final (Neto)']):,.0f}"
         cant = str(int(fila["Cantidad"]))
         total = f"${float(fila['Total Neto']):,.0f}"
         
-        if len(desc) > 46:
-            desc = desc[:43] + "..."
+        # Limitar texto de descripción para mantener la grilla compacta y estética
+        if len(desc) > 42:
+            desc = desc[:39] + "..."
             
-        pdf.cell(22, 7, cod, border=1, align="C")
-        pdf.cell(23, 7, marca, border=1, align="C")
-        pdf.cell(80, 7, desc, border=1, align="L")
-        pdf.cell(25, 7, p_unit, border=1, align="R")
-        pdf.cell(15, 7, cant, border=1, align="C")
-        pdf.cell(25, 7, total, border=1, align="R")
+        pdf.cell(24, 7, cod, border=1, align="C")
+        pdf.cell(24, 7, marca, border=1, align="C")
+        pdf.cell(72, 7, desc, border=1, align="L")
+        pdf.cell(28, 7, p_unit, border=1, align="R")
+        pdf.cell(14, 7, cant, border=1, align="C")
+        pdf.cell(28, 7, total, border=1, align="R")
         pdf.ln(7)
         
-    pdf.ln(4)
+    pdf.ln(5)
     
-    # Bloque de Cierre Económico
+    # Bloque de Cierre Económico y Condiciones de Venta (Estructura espejo del Excel)
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(125, 6, "", border=0)
-    pdf.cell(30, 6, "SUBTOTAL:", border=1, align="L")
-    pdf.cell(35, 6, f"${total_neto:,.0f}", border=1, align="R")
+    
+    # Fila 1: Subtotal
+    pdf.cell(120, 6, "Observaciones:", border=0)
+    pdf.cell(42, 6, "SUBTOTAL", border=1, align="R")
+    pdf.cell(28, 6, f"${total_neto:,.0f}", border=1, align="R")
     pdf.ln(6)
     
-    pdf.cell(125, 6, "", border=0)
-    pdf.cell(30, 6, "IVA (19%):", border=1, align="L")
-    pdf.cell(35, 6, f"${iva:,.0f}", border=1, align="R")
-    pdf.ln(6)
-    
-    pdf.set_fill_color(233, 237, 244)
-    pdf.cell(125, 6, "", border=0)
-    pdf.cell(30, 6, "TOTAL:", border=1, align="L", fill=True)
-    pdf.cell(35, 6, f"${total_bruto:,.0f}", border=1, align="R", fill=True)
-    pdf.ln(8)
-    
+    # Fila 2: IVA
     pdf.set_font("helvetica", "", 9)
-    pdf.cell(0, 5, "Condiciones de Venta: Plazo de entrega por confirmar. Validez: 7 días. Pago: CONTADO.", ln=True)
-    pdf.cell(0, 5, "A la espera de sus comentarios, le saluda atentamente,", ln=True)
-    pdf.ln(8)
+    pdf.cell(120, 6, "1: Plazo de entrega por confirmar", border=0)
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(0, 5, "Enrique Hernández P. - VGM SpA", ln=True)
+    pdf.cell(42, 6, "IVA", border=1, align="R")
+    pdf.cell(28, 6, f"${iva:,.0f}", border=1, align="R")
+    pdf.ln(6)
+    
+    # Fila 3: Total Oficial (Mismo gris claro que el Excel: E9EDF4 -> RGB: 233, 237, 244)
+    pdf.set_font("helvetica", "", 9)
+    pdf.cell(120, 6, "2. Validez de cotización: 7 días", border=0)
+    pdf.set_font("helvetica", "B", 10)
+    pdf.set_fill_color(233, 237, 244)
+    pdf.cell(42, 6, "TOTAL", border=1, align="R")
+    pdf.cell(28, 6, f"${total_bruto:,.0f}", border=1, align="R", fill=True)
+    pdf.ln(8)
+    
+    # Firmas y Cierres Comerciales finales
+    pdf.set_font("helvetica", "B", 10)
+    pdf.cell(120, 5, "Condiciones de Pago: CONTADO", ln=0)
+    pdf.set_font("helvetica", "BI", 11)
+    pdf.cell(70, 5, "Enrique Hernández P.", ln=1, align="R")
+    
+    pdf.set_font("helvetica", "", 10)
+    pdf.cell(120, 5, "A la espera de sus comentarios, le saluda atentamente :", ln=0)
+    pdf.set_font("helvetica", "B", 10)
+    pdf.cell(70, 5, "VGM SpA", ln=1, align="R")
     
     return pdf.output()
 
@@ -350,7 +386,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws.cell(row=fila_actual, column=7, value="Enrique Hernández P.").font = font_firma
     ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     fila_actual += 1
-    ws.cell(row=fila_actual, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
+    ws.cell(row=fila_actual, column=1, value="Conditions de Pago: CONTADO").font = font_negrita
     ws.cell(row=fila_actual, column=7, value="VGM SpA").font = font_negrita
     ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     
@@ -504,7 +540,6 @@ if input_listo and api_key:
                     })
                 candidates_rag[termino] = cand_list
 
-            # RESTAURADO: Prompt de formato estricto e inquebrantable para evitar caídas catastróficas
             prompt_resolucion = """
             Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA.
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
@@ -514,7 +549,7 @@ if input_listo and api_key:
             2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
             3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
             4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
-            5. PUNTA CORONA / LLAVES COMBINADAS: Deben ser estrictamente de la familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Queda terminantemente prohibido elegir llaves con chicharra a menos que se solicite explícitamente de forma textual. Dar obligatoriamente como primera opción la marca 'YATO', y como segunda opción 'ANDES-SAM'.
+            5. PUNTA CORONA / LLAVES COMBINADAS: Deben ser estrictamente de la familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Queda terminantemente prohibido elegir llaves con chicharra a menos que se solicite explícitamente de forma textual. Dar obligatoriamente como primera opción la marca 'YATO', and como segunda opción 'ANDES-SAM'.
             6. DADOS TORX DE CUADRANTE 1/2: Filtrar y priorizar exclusivamente los códigos de dados Torx con encastre o cuadrante de 1/2" del catálogo.
             7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos clave: YT1041, YT1039 u homólogos de impacto).
             8. DADOS TORX SUELTOS / INDIVIDUALES (Ej: Torx 30, Torx 27 o textos independientes tipo 'Dado torx 30 -27'): Si el cliente pide dados Torx sueltos o individuales, se deben seleccionar obligatoriamente los códigos de dados individuales correspondientes del catálogo (NUNCA juegos completos), respetando las medidas indicadas por el cliente.
@@ -556,7 +591,7 @@ if input_listo and api_key:
                         px_lista = float(limpiar_precio(match_rows.iloc[0][col_precio]))
                         if col_marca: marca = str(match_rows.iloc[0][col_marca]).upper()
                 
-                # Jerarquía comercial optimizada
+                # Jerarquía comercial optimizada por Enrique
                 precio_manual_val = limpiar_precio(precio_manual_input)
                 if precio_manual_val > 0:
                     px_final_neto = precio_manual_val
@@ -641,10 +676,10 @@ if st.session_state['df_resultado'] is not None:
         st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'], logo_data, dict_img
     )
     
-    # Escudo de protección de conversión de PDF multiplataforma
+    # Generación y blindaje del PDF unificado con logo VGM SpA corporativo
     pdf_raw = generar_pdf_comercial(
         st.session_state['df_resultado'], st.session_state['nombre_cliente_s'], st.session_state['empresa_cliente_s'],
-        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto']
+        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'], logo_data
     )
     pdf_bin = pdf_raw.encode('latin-1') if isinstance(pdf_raw, str) else bytes(pdf_raw)
     
