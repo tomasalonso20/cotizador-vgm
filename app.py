@@ -85,7 +85,7 @@ def leer_csv_tolerante(ruta_archivo):
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if coincidencias >= 2:
+                    if modificaciones := coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -401,15 +401,14 @@ with st.sidebar:
     precio_manual_input = st.text_input("Precio Neto Fijo Alternativo (Opcional):", placeholder="Ej: 500000")
     
     st.markdown("---")
-    st.subheader("🖼️ Branding & Fotos")
+    st.subheader("🖼️ Branding")
     
-    # AJUSTE ENRIQUE: Se eliminó el st.file_uploader del logo porque ya se autodetecta desde el servidor base
     if logo_bytes:
         st.success("✅ Logo institucional autodetectado con éxito.")
     else:
         st.error("⚠️ No se encontró 'logo.png' en el servidor.")
         
-    fotos_productos = st.file_uploader("Sube las fotos de esta cotización", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+    # AJUSTE ENRIQUE: Se eliminó el cargador temporal de fotos de productos para limpiar la pantalla móvil
     
     st.markdown("---")
     api_key = None
@@ -630,7 +629,8 @@ if st.session_state['df_resultado'] is not None:
     
     st.markdown("---")
     
-    dict_img = {os.path.splitext(f.name)[0].strip().lower(): f.getvalue() for f in fotos_productos} if fotos_productos else {}
+    # AJUSTE ENRIQUE: Las imágenes quedan vacías por ahora hasta que automaticemos el mapeo
+    dict_img = {}
     
     # Renderizar archivos usando directamente la base fija del servidor
     excel_bin = generar_excel_comercial(
