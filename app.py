@@ -15,7 +15,56 @@ from fpdf import FPDF
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🔧")
+
+# AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR (Movido al inicio para la cabecera web)
+logo_bytes = None
+for ext in ["png", "jpg", "jpeg"]:
+    if os.path.exists(f"logo.{ext}"):
+        with open(f"logo.{ext}", "rb") as f:
+            logo_bytes = f.read()
+        break
+
+# DISEÑO DE CABECERA CORPORATIVA: Título a la izquierda y Logo pequeño a la derecha
+col_titulo, col_logo = st.columns([6, 1])
+with col_titulo:
+    st.title("Cotizador Express - VGM SpA 🔧")
+with col_logo:
+    if logo_bytes:
+        # Muestra el logo institucional en un tamaño sutil y limpio en la esquina superior derecha
+        st.image(io.BytesIO(logo_bytes), width=110)
+
+# INYECCIÓN DE COLORES CORPORATIVOS EN LA INTERFAZ WEB
+st.markdown("""
+    <style>
+    /* Color del azul corporativo principal para todos los títulos */
+    h1, h2, h3, h4, h5, h6 {
+        color: #1F497D !important;
+    }
+    /* Estilo corporativo premium para el botón principal de Generar */
+    div.stButton > button:first-child {
+        background-color: #365F91 !important;
+        color: white !important;
+        border: none !important;
+        padding: 0.6rem 1.2rem !important;
+        border-radius: 4px !important;
+        font-weight: bold !important;
+    }
+    /* Efecto de cambio de tono al pasar el cursor sobre el botón (Hover) */
+    div.stButton > button:first-child:hover {
+        background-color: #1F497D !important;
+        color: white !important;
+        border: none !important;
+    }
+    /* Estilo limpio para las pestañas de carga (Tabs) */
+    button[data-baseweb="tab"] {
+        color: #555555 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #1F497D !important;
+        border-bottom-color: #1F497D !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # Inicializar estados de memoria para evitar que se borren los datos al hacer clic en descargas
 if 'df_resultado' not in st.session_state:
@@ -272,7 +321,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"
     ws["A7"].font = font_negrita
     
-    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra proposal:"
+    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
     ws["A8"].font = font_normal
     
     titulos_columnas = ["CODIGO", "MARCA", "DESCRIPCIÓN", "PRECIO UNITARIO NETO", "CANTIDAD", "PRECIO UNITARIO TOTAL", "IMAGEN REFERENCIAL"]
@@ -384,14 +433,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     wb.save(output)
     return output.getvalue()
-
-# AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR
-logo_bytes = None
-for ext in ["png", "jpg", "jpeg"]:
-    if os.path.exists(f"logo.{ext}"):
-        with open(f"logo.{ext}", "rb") as f:
-            logo_bytes = f.read()
-        break
 
 # Interfaz de Usuario Lateral (Sidebar)
 with st.sidebar:
@@ -600,7 +641,7 @@ if input_listo and api_key:
                 st.session_state['empresa_cliente_s'] = empresa_cliente
                 st.session_state['numero_folio_s'] = numero_folio
                 st.session_state['condicion_pago_s'] = condicion_pago_input
-                st.session_state['vendedor_s'] = seller = vendedor_input
+                st.session_state['vendedor_s'] = vendedor_input
                 st.session_state['subtotal_lista'] = sum(x["Precio Lista (Neto)"] * x["Cantidad"] for x in cotizacion_final)
                 st.session_state['total_neto_final'] = sum(x["Total Neto"] for x in cotizacion_final)
                 st.session_state['descuento_total_pesos'] = max(st.session_state['subtotal_lista'] - st.session_state['total_neto_final'], 0.0)
