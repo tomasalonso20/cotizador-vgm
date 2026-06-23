@@ -142,7 +142,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
         marca = str(fila["Marca"])
         desc = str(fila["Descripción Catálogo"]).replace("✨ [Historial] ", "").replace("⚠️ (Match sugerido) ", "")
         
-        # Filtro de protección contra emojis para evitar errores de codificación en fuentes nativas PDF
+        # Filtro de protección contra caracteres especiales/emojis
         desc = desc.encode('latin-1', 'ignore').decode('latin-1')
         p_unit = f"${float(fila['Precio Final (Neto)']):,.0f}"
         cant = str(int(fila["Cantidad"]))
@@ -504,10 +504,38 @@ if input_listo and api_key:
                     })
                 candidates_rag[termino] = cand_list
 
+            # RESTAURADO: Prompt de formato estricto e inquebrantable para evitar caídas catastróficas
             prompt_resolucion = """
             Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA.
-            Mapea los candidatos al mejor código respetando estrictamente las reglas comerciales de llaves estándar tradicionales, dados Torx sueltos de encastre individual y dados de impacto pesado.
-            """ + json.dumps(candidates_rag, ensure_ascii=False)
+            Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
+            
+            ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
+            1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
+            2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
+            3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
+            4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
+            5. PUNTA CORONA / LLAVES COMBINADAS: Deben ser estrictamente de la familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Queda terminantemente prohibido elegir llaves con chicharra a menos que se solicite explícitamente de forma textual. Dar obligatoriamente como primera opción la marca 'YATO', y como segunda opción 'ANDES-SAM'.
+            6. DADOS TORX DE CUADRANTE 1/2: Filtrar y priorizar exclusivamente los códigos de dados Torx con encastre o cuadrante de 1/2" del catálogo.
+            7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos clave: YT1041, YT1039 u homólogos de impacto).
+            8. DADOS TORX SUELTOS / INDIVIDUALES (Ej: Torx 30, Torx 27 o textos independientes tipo 'Dado torx 30 -27'): Si el cliente pide dados Torx sueltos o individuales, se deben seleccionar obligatoriamente los códigos de dados individuales correspondientes del catálogo (NUNCA juegos completos), respetando las medidas indicadas por el cliente.
+            9. FILTRO ESTRICTO NO ENCONTRADO: Si no calza nada lógico, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
+            
+            Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
+            """ + json.dumps(candidates_rag, ensure_ascii=False, indent=2) + """
+            
+            Devuelve ÚNICAMENTE un JSON estructurado de la siguiente forma, sin bloques markdown ni texto adicional:
+            {
+                "resultados": [
+                    {
+                        "busqueda_original": "nombre exacto de la busqueda original",
+                        "codigo_elegido": "código real del catálogo o 'MANUAL'",
+                        "descripcion_elegida": "descripción exacta del catálogo o '❌ NO ENCONTRADO'",
+                        "precio_elegido": 12345.0,
+                        "coincidencia_exacta": true
+                    }
+                ]
+            }
+            """
             
             response_resolucion = model.generate_content(prompt_resolucion)
             datos_finales = json.loads(response_resolucion.text.strip().replace("```json", "").replace("```", ""))
@@ -528,7 +556,7 @@ if input_listo and api_key:
                         px_lista = float(limpiar_precio(match_rows.iloc[0][col_precio]))
                         if col_marca: marca = str(match_rows.iloc[0][col_marca]).upper()
                 
-                # Jerarquía comercial optimizada por Enrique
+                # Jerarquía comercial optimizada
                 precio_manual_val = limpiar_precio(precio_manual_input)
                 if precio_manual_val > 0:
                     px_final_neto = precio_manual_val
@@ -567,4 +595,69 @@ if input_listo and api_key:
                 
                 cotizacion_final.append({
                     "Código": cod, "Marca": marca, "Descripción Catálogo": desc, "Cantidad": cant,
-                    "Precio Lista (Neto)": px_lista, "Descuento Aplicado": texto
+                    "Precio Lista (Neto)": px_lista, "Descuento Aplicado": texto_desc,
+                    "Precio Final (Neto)": px_final_neto, "Total Neto": px_final_neto * cant
+                })
+            
+            if cotizacion_final:
+                st.session_state['df_resultado'] = pd.DataFrame(cotizacion_final)
+                st.session_state['nombre_cliente_s'] = nombre_cliente
+                st.session_state['empresa_cliente_s'] = empresa_cliente
+                st.session_state['numero_folio_s'] = numero_folio
+                st.session_state['subtotal_lista'] = sum(x["Precio Lista (Neto)"] * x["Cantidad"] for x in cotizacion_final)
+                st.session_state['total_neto_final'] = sum(x["Total Neto"] for x in cotizacion_final)
+                st.session_state['descuento_total_pesos'] = max(st.session_state['subtotal_lista'] - st.session_state['total_neto_final'], 0.0)
+                st.session_state['iva_calculado'] = st.session_state['total_neto_final'] * 0.19
+                st.session_state['total_bruto'] = st.session_state['total_neto_final'] + st.session_state['iva_calculado']
+                st.success("¡Operación completada con éxito!")
+        except Exception as e:
+            st.error(f"Error en procesamiento comercial: {e}")
+
+# RENDERIZADO ESTABLE DESDE MEMORIA (Previene borrados al interactuar)
+if st.session_state['df_resultado'] is not None:
+    st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
+    st.dataframe(
+        st.session_state['df_resultado'].style.format({
+            "Precio Lista (Neto)": "${:,.0f}", "Precio Final (Neto)": "${:,.0f}", "Total Neto": "${:,.0f}", "Cantidad": "{:,.0f}"
+        }),
+        use_container_width=True
+    )
+    
+    st.markdown("### 📊 Desglose Económico")
+    c_neto, c_desc, c_neto_f, c_iva, c_bruto = st.columns(5)
+    c_neto.metric(label="Total Lista Neto", value=f"${st.session_state['subtotal_lista']:,.0f}")
+    c_desc.metric(label="Descuento Otorgado", value=f"-${st.session_state['descuento_total_pesos']:,.0f}")
+    c_neto_f.metric(label="Neto Final Cliente", value=f"${st.session_state['total_neto_final']:,.0f}")
+    c_iva.metric(label="IVA (19%)", value=f"${st.session_state['iva_calculado']:,.0f}")
+    c_bruto.metric(label="Total Bruto", value=f"${st.session_state['total_bruto']:,.0f}")
+    
+    st.markdown("---")
+    
+    logo_data = logo_empresa.getvalue() if logo_empresa else logo_bytes
+    dict_img = {os.path.splitext(f.name)[0].strip().lower(): f.getvalue() for f in fotos_productos} if fotos_productos else {}
+    
+    excel_bin = generar_excel_comercial(
+        st.session_state['df_resultado'], st.session_state['nombre_cliente_s'], st.session_state['empresa_cliente_s'],
+        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'], logo_data, dict_img
+    )
+    
+    # Escudo de protección de conversión de PDF multiplataforma
+    pdf_raw = generar_pdf_comercial(
+        st.session_state['df_resultado'], st.session_state['nombre_cliente_s'], st.session_state['empresa_cliente_s'],
+        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto']
+    )
+    pdf_bin = pdf_raw.encode('latin-1') if isinstance(pdf_raw, str) else bytes(pdf_raw)
+    
+    c_down1, c_down2 = st.columns(2)
+    with c_down1:
+        st.download_button(
+            label="🟢 Descargar Documento Excel Premium (.xlsx)", data=excel_bin,
+            file_name=f"Cotizacion_{st.session_state['numero_folio_s']}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
+        )
+    with c_down2:
+        st.download_button(
+            label="🔴 Descargar Documento PDF Oficial (.pdf)", data=pdf_bin,
+            file_name=f"Cotizacion_{st.session_state['numero_folio_s']}.pdf", mime="application/pdf", use_container_width=True
+        )
+else:
+    st.info("Introduce una solicitud arriba y presiona Generar para activar los paneles comerciales.")
