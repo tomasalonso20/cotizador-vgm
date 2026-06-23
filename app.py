@@ -85,7 +85,7 @@ def leer_csv_tolerante(ruta_archivo):
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if coincidencias >= 2:
+                    if modificaciones := coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -121,7 +121,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.cell(0, 5, f"Empresa: {empresa if empresa else 'No especificada'}", ln=True)
     pdf.ln(4)
     
-    # Encabezados de la Tabla
+    # Encabezados de la Tabla PDF
     pdf.set_font("helvetica", "B", 9)
     pdf.set_fill_color(54, 95, 145) 
     pdf.set_text_color(255, 255, 255)
@@ -158,7 +158,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
         
     pdf.ln(4)
     
-    # Bloque de Cierre Económico
+    # Bloque Económico
     pdf.set_font("helvetica", "B", 10)
     pdf.cell(125, 6, "", border=0)
     pdf.cell(30, 6, "SUBTOTAL:", border=1, align="L")
@@ -185,7 +185,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial (Sin Líneas de Cuadrícula)
+# FUNCIÓN: Generación de Excel Comercial Oficial (Sin Líneas de Cuadrícula, 1 Página de Ancho)
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -241,7 +241,8 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     ws["A4"] = "76.834.968-1"
     ws["A4"].font = font_negrita
-    ws["A4"] = "Chopin 2848. San Joaquín. Santiago"
+    ws["A5"] = "Chopin 2848. San Joaquín. Santiago"
+    ws["A5"].font = font_normal
     
     ws["A6"] = f"Sr(a).: {cliente if cliente else 'No especificado'}"
     ws["A6"].font = font_negrita
@@ -404,16 +405,25 @@ if input_listo and api_key:
             df = df_catalogo.copy()
             df.columns = [str(c).strip() for c in df.columns]
             
-            col_codigo = df.columns[0]
-            col_desc = df.columns[1] if len(df.columns) > 1 else df.columns[0]
-            col_precio = df.columns[-1]
-            col_marca = next((c for c in df.columns if 'mar' in c.lower()), None)
+            columnas_disponibles = list(df.columns)
+            n_cols = len(columnas_disponibles)
+            
+            idx_cod = next((i for i, c in enumerate(columnas_disponibles) if 'cod' in c.lower() or 'id' in c.lower()), 0)
+            idx_desc = next((i for i, c in enumerate(columnas_disponibles) if 'desc' in c.lower() or 'nom' in c.lower() or 'art' in c.lower() or 'prod' in c.lower() or 'det' in c.lower()), 0 if n_cols == 1 else 1)
+            idx_precio = next((i for i, c in enumerate(columnas_disponibles) if 'prec' in c.lower() or 'val' in c.lower() or 'neto' in c.lower() or 'unit' in c.lower()), n_cols - 1)
+            idx_marca = next((i for i, c in enumerate(columnas_disponibles) if 'mar' in c.lower() or 'bra' in c.lower() or 'fab' in c.lower()), -1)
+            
+            col_codigo = columnas_disponibles[idx_cod]
+            col_desc = columnas_disponibles[idx_desc]
+            col_precio = columnas_disponibles[idx_precio]
+            col_marca = columnas_disponibles[idx_marca] if idx_marca != -1 else None
             
             df['__desc_clean'] = df[col_desc].apply(normalizar_texto)
             df['__cod_clean'] = df[col_codigo].apply(normalizar_texto)
             
             response = model.generate_content(contenido_para_gemini)
-            datos_pedido = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
+            datos_pedido = json.loads(response.text.strip().replace("```json", "").replace("
+```", ""))
             lista_productos = datos_pedido.get("productos", [])
             
             cantidades_dict = {item.get("busqueda", ""): int(item.get("cantidad", 1)) for item in lista_productos}
@@ -422,8 +432,16 @@ if input_listo and api_key:
             for item in lista_productos:
                 termino = item.get("busqueda", "")
                 if not termino: continue
-                palabras_clave = set(limpiar_plurales(normalizar_texto(t)).split() for t in [termino] + item.get("sinonimos", []))
-                palabras_flat = {p for sub in palabras_clave for p in sub if len(p) > 2 and p not in STOP_WORDS}
+                
+                # CORRECCIÓN: Filtrado correcto y plano de palabras clave sin romper hash
+                palabras_flat = set()
+                for t in [termino] + item.get("sinonimos", []):
+                    for p in limpiar_plurales(normalizar_texto(t)).split():
+                        if len(p) > 2 and p not in STOP_WORDS:
+                            palabras_flat.add(p)
+                
+                if not palabras_flat:
+                    palabras_flat = {normalizar_texto(termino)}
                 
                 def score_prefiltrado(row):
                     txt_inv = " " + str(row['__desc_clean']) + " " + str(row['__cod_clean']) + " "
@@ -468,15 +486,24 @@ if input_listo and api_key:
                     px_final_neto = px_lista - (px_lista * (descuento_aplicar / 100))
                     texto_desc = f"{descuento_aplicar}%"
                 else:
+                    # CORRECCIÓN: Búsqueda dinámica e impecable en el cerebro histórico ERP
                     precio_historico = False
                     ultimo_px = 0.0
                     if df_historial is not None and cod != "MANUAL" and empresa_cliente:
                         try:
-                            df_h_cli = df_historial[df_historial.astype(str).apply(lambda x: x.str.lower()).ln_contains(empresa_cliente.lower())]
-                            match_hist = df_h_cli[df_h_cli.astype(str).apply(lambda x: x.str.lower()).ln_contains(cod.lower())]
-                            if not match_hist.empty:
-                                ultimo_px = float(limpiar_precio(match_hist.iloc[-1].values[-1]))
-                                if ultimo_px > 0: precio_historico = True
+                            columnas_h = list(df_historial.columns)
+                            col_h_cli = next((c for c in columnas_h if 'cli' in c.lower() or 'emp' in c.lower() or 'raz' in c.lower() or 'nom' in c.lower()), columnas_h[0])
+                            col_h_cod = next((c for c in columnas_h if 'cod' in c.lower() or 'art' in c.lower() or 'pro' in c.lower()), columnas_h[1] if len(columnas_h) > 1 else columnas_h[0])
+                            col_h_px = next((c for c in columnas_h if 'prec' in c.lower() or 'net' in c.lower() or 'val' in c.lower() or 'vta' in c.lower() or 'tot' in c.lower()), columnas_h[-1])
+                            
+                            term_emp = normalizar_texto(empresa_cliente)
+                            df_h_filtrado = df_historial[df_historial[col_h_cli].astype(str).apply(normalizar_texto).str.contains(term_emp, na=False, regex=False)]
+                            match_hist_prod = df_h_filtrado[df_h_filtrado[col_h_cod].astype(str).str.strip().str.lower() == cod.lower()]
+                            
+                            if not match_hist_prod.empty:
+                                ultimo_px = float(limpiar_precio(match_hist_prod.iloc[-1][col_h_px]))
+                                if ultimo_px > 0:
+                                    precio_historico = True
                         except: pass
                     
                     if precio_historico:
@@ -494,7 +521,6 @@ if input_listo and api_key:
                 })
             
             if cotizacion_final:
-                # Guardar de forma persistente en la sesión
                 st.session_state['df_resultado'] = pd.DataFrame(cotizacion_final)
                 st.session_state['nombre_cliente_s'] = nombre_cliente
                 st.session_state['empresa_cliente_s'] = empresa_cliente
@@ -508,7 +534,7 @@ if input_listo and api_key:
         except Exception as e:
             st.error(f"Error: {e}")
 
-# RENDERIZADO DESDE MEMORIA (Previene que se borre nada al interactuar)
+# RENDERIZADO DESDE MEMORIA (Evita el borrado por interacción en el celular)
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
     st.dataframe(
