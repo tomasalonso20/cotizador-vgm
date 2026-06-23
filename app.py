@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Inteligente Premium V2)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Inteligente Premium V3)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -74,7 +74,7 @@ def leer_csv_tolerante(ruta_archivo):
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if modificaciones := coincidencias >= 2:
+                    if coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -88,7 +88,7 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN: Generación de Excel Comercial Oficial
+# FUNCIÓN: Generación de Excel Comercial Oficial con título combinado y centrado
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -125,8 +125,13 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         except:
             pass
             
-    ws["A3"] = f"COTIZACIÓN N°{nro_cotiz}"
-    ws["A3"].font = font_titulo
+    # CAMBIO SOLICITADO: Título combinado y centrado en el encabezado (Columnas A a G)
+    ws.merge_cells("A3:G3")
+    celda_tit = ws["A3"]
+    celda_tit.value = f"COTIZACIÓN N°{nro_cotiz}"
+    celda_tit.font = font_titulo
+    celda_tit.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[3].height = 26
     
     ws["A4"] = "76.834.968-1"
     ws["A4"].font = font_negrita
@@ -362,7 +367,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
             - Si detectas 'Pistola neumática' o similar, incluye obligatoriamente: 'llave impacto', 'neumatica', 'aire', 'cuadrante', '550', 'std'.
             - Si detectas 'Linterna imantada' o similar, incluye obligatoriamente: 'lampara trabajo', 'iman', 'led', 'funcional', 'cob'.
             - Si detectas 'Linterna led de cabeza', 'linterna de cabeza' o 'frontal', incluye obligatoriamente: 'l-head-1', 'l_head_1', 'cabeza', 'frontal', 'cintillo'. NO agregues el término 'imantada'.
-            - Si detectas 'Punta corona' o 'llaves combinadas', incluye obligatoriamente como palabras clave de marca: 'yato', 'andes sam', 'andes-sam'.
+            - Si detectas 'Punta corona' o 'llaves combinadas', especifica rigurosamente en sinónimos que son de la familia ESTÁNDAR TRADICIONAL, SIN chicharra (no ratchet), e inyecta palabras clave de marca: 'yato', 'andes sam', 'andes-sam'.
             - Si detectas 'Dados torx' y menciona o se asocia a cuadrante de 1/2, busca explícitamente encastre '1/2' o 'cuadrante 1/2'.
             - Si detectas 'Dados de impacto', inyecta sinónimos asociados a líneas pesadas de impacto tipo 'yt1041', 'yt1039'.
             
@@ -423,17 +428,17 @@ if df_catalogo is not None and imagen_pedido and api_key:
             st.info("🔄 Fase 3: Resolviendo códigos y aplicando jerarquía de asignación...")
             
             prompt_resolucion = """
-            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
+            Actúas como un expert en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
             1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
-            2. LINTERNAS LARGAS / IMANTADAS: Código predilectas es 'YT08518'.
+            2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
             3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
             4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
-            5. PUNTA CORONA / LLAVES COMBINADAS: Dar obligatoriamente como primera opción la marca 'YATO'. Si no está, usar 'ANDES-SAM' como segunda opción.
+            5. PUNTA CORONA / LLAVES COMBINADAS: Deben ser estrictamente de la familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Queda terminantemente prohibido elegir llaves con chicharra a menos que se solicite explícitamente de forma textual. Dar obligatoriamente como primera opción la marca 'YATO', y como segunda opción 'ANDES-SAM'.
             6. DADOS TORX DE CUADRANTE 1/2: Filtrar y priorizar exclusivamente los códigos de dados Torx con encastre o cuadrante de 1/2" del catálogo.
-            7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos de referencia clave: YT1041, YT1039 u homólogos de la línea de impacto).
+            7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos clave: YT1041, YT1039 u homólogos de impacto).
             8. FILTRO ESTRICTO NO ENCONTRADO: Si no calza nada lógico, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
             
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
@@ -493,7 +498,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 elif not res.get("coincidencia_exacta", True):
                     desc = f"⚠️ (Match sugerido) {desc}"
                 
-                # JERARQUÍA COMERCIAL OPTIMIZADA POR ENRIQUE
+                # JERARQUÍA COMERCIAL OPTIMIZADA
                 precio_manual_val = limpiar_precio(precio_manual_input)
                 
                 if precio_manual_val > 0:
@@ -503,7 +508,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
                     px_final_neto = px_lista - (px_lista * (descuento_aplicar / 100))
                     texto_descuento_col = f"{descuento_aplicar}%"
                 else:
-                    # Si no hay descuento ni precio manual, gatilla auditoría en el Historial de Ventas ERP
+                    # Modo histórico de ventas inteligente
                     precio_historico_encontrado = False
                     ultimo_precio_cobrado = 0.0
                     
@@ -543,7 +548,6 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 df_resultado = pd.DataFrame(cotizacion_final)
                 st.success("¡Cotización construida exitosamente!")
                 
-                # VISTA PREMIUM OPTIMIZADA PARA PANTALLAZOS EN EL CELULAR
                 st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
                 
                 df_formateado = df_resultado.copy()
