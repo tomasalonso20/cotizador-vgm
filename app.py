@@ -38,7 +38,7 @@ def limpiar_plurales(texto):
             limpias.append(p)
     return " ".join(limpias)
 
-# LIMPIADOR DE PRECIOS: Formatea a números enteros limmios sin decimales molestos
+# LIMPIADOR DE PRECIOS: Formatea a números enteros limpios sin decimales molestos
 def limpiar_precio(valor):
     if pd.isna(valor):
         return 0.0
@@ -74,7 +74,7 @@ def leer_csv_tolerante(ruta_archivo):
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if modificaciones := coincidencias >= 2:
+                    if coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -88,7 +88,7 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN: Generación de Excel Comercial Oficial con título combinado y centrado
+# FUNCIÓN: Generación de Excel Comercial Oficial con título combinado, centrado y tamaño 16
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -97,7 +97,8 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     ws.views.sheetView[0].showGridLines = True
     
-    font_titulo = Font(name="Arial", size=12, bold=True, color="1F497D")
+    # AJUSTE: Tamaño de letra del título cambiado a 16 para mayor prestancia
+    font_titulo = Font(name="Arial", size=16, bold=True, color="1F497D")
     font_cabecera_tabla = Font(name="Arial", size=10, bold=True, color="FFFFFF")
     font_negrita = Font(name="Arial", size=10, bold=True)
     font_normal = Font(name="Arial", size=10)
@@ -125,13 +126,13 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         except:
             pass
             
-    # Título combinado y centrado en el encabezado (Columnas A a G)
+    # Título combinado y centrado en el encabezado (Columnas A a G) con nueva altura de fila 32
     ws.merge_cells("A3:G3")
     celda_tit = ws["A3"]
     celda_tit.value = f"COTIZACIÓN N°{nro_cotiz}"
     celda_tit.font = font_titulo
     celda_tit.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[3].height = 26
+    ws.row_dimensions[3].height = 32
     
     ws["A4"] = "76.834.968-1"
     ws["A4"].font = font_negrita
@@ -312,7 +313,7 @@ with st.sidebar:
 
 st.subheader("1. Carga la Solicitud del Cliente (Elige el formato)")
 
-# NUEVO: Estructuración por pestañas para optimizar espacio móvil
+# Estructuración por pestañas para optimizar espacio móvil
 tab_imagen, tab_texto, tab_pdf = st.tabs(["📸 Pantallazo / Imagen", "✍️ Copiar-Pegar Texto", "📄 Archivo PDF"])
 
 imagen_pedido = None
@@ -347,7 +348,7 @@ else:
 input_listo = False
 contenido_para_gemini = []
 
-# Base del prompt extractor con tus nuevas reglas comerciales incrustadas
+# Base del prompt extractor con tus reglas comerciales incrustadas
 prompt_extraccion = """
 Analiza detalladamente esta solicitud de pedido (puede ser una imagen, un bloque de texto o un documento PDF). Extrae cada producto solicitado y su cantidad precisa.
 Además, para cada producto genera una lista de 4 a 6 sinónimos o términos técnicos comerciales en español que se usen comúnmente en los catálogos de herramientas industriales.
