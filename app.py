@@ -383,7 +383,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     wb.save(output)
     return output.getvalue()
 
-# AUTODETECCIÓN DE LOGO CORPORATIVO EN EL SERVIDOR
+# AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR
 logo_bytes = None
 for ext in ["png", "jpg", "jpeg"]:
     if os.path.exists(f"logo.{ext}"):
@@ -402,7 +402,13 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("🖼️ Branding & Fotos")
-    logo_empresa = st.file_uploader("Sube o reemplaza el logo corporativo", type=["png", "jpg", "jpeg"])
+    
+    # AJUSTE ENRIQUE: Se eliminó el st.file_uploader del logo porque ya se autodetecta desde el servidor base
+    if logo_bytes:
+        st.success("✅ Logo institucional autodetectado con éxito.")
+    else:
+        st.error("⚠️ No se encontró 'logo.png' en el servidor.")
+        
     fotos_productos = st.file_uploader("Sube las fotos de esta cotización", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
     
     st.markdown("---")
@@ -421,7 +427,6 @@ with tab_imagen: imagen_pedido = st.file_uploader("Selecciona la imagen", type=[
 with tab_texto: texto_pedido = st.text_area("Pega el texto aquí:")
 with tab_pdf: pdf_pedido = st.file_uploader("Sube el PDF", type=["pdf"])
 
-# CARGA ÚNICA DEL CATÁLOGO VIGENTE (Optimizado sin historial de ventas lento)
 df_catalogo = leer_csv_tolerante("lista_vigente.csv")
 
 if df_catalogo is None:
@@ -523,7 +528,7 @@ if input_listo and api_key:
                 candidates_rag[termino] = cand_list
 
             prompt_resolucion = """
-            Actúas como un expert en repuestos y herramientas industriales para la empresa VGM SpA.
+            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA.
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
@@ -573,7 +578,7 @@ if input_listo and api_key:
                         px_lista = float(limpiar_precio(match_rows.iloc[0][col_precio]))
                         if col_marca: marca = str(match_rows.iloc[0][col_marca]).upper()
                 
-                # JERARQUÍA COMERCIAL SIMPLIFICADA Y ULTRA-VELOZ (Sin demoras de historial ERP)
+                # JERARQUÍA COMERCIAL SIMPLIFICADA Y ULTRA-VELOZ
                 precio_manual_val = limpiar_precio(precio_manual_input)
                 if precio_manual_val > 0:
                     px_final_neto = precio_manual_val
@@ -605,7 +610,7 @@ if input_listo and api_key:
         except Exception as e:
             st.error(f"Error en procesamiento comercial: {e}")
 
-# RENDERIZADO ESTABLE DESDE MEMORIA (Previene borrados al descargar en teléfonos móviles)
+# RENDERIZADO ESTABLE DESDE MEMORIA (Previene borrados al interactuar en teléfonos móviles)
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
     st.dataframe(
@@ -625,17 +630,17 @@ if st.session_state['df_resultado'] is not None:
     
     st.markdown("---")
     
-    logo_data = logo_empresa.getvalue() if logo_empresa else logo_bytes
     dict_img = {os.path.splitext(f.name)[0].strip().lower(): f.getvalue() for f in fotos_productos} if fotos_productos else {}
     
+    # Renderizar archivos usando directamente la base fija del servidor
     excel_bin = generar_excel_comercial(
         st.session_state['df_resultado'], st.session_state['nombre_cliente_s'], st.session_state['empresa_cliente_s'],
-        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'], logo_data, dict_img
+        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'], logo_bytes, dict_img
     )
     
     pdf_raw = generar_pdf_comercial(
         st.session_state['df_resultado'], st.session_state['nombre_cliente_s'], st.session_state['empresa_cliente_s'],
-        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'], logo_data
+        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'], logo_bytes
     )
     pdf_bin = pdf_raw.encode('latin-1') if isinstance(pdf_raw, str) else bytes(pdf_raw)
     
