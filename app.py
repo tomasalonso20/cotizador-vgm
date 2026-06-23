@@ -85,7 +85,7 @@ def leer_csv_tolerante(ruta_archivo):
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if modificaciones := coincidencias >= 2:
+                    if coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -99,7 +99,7 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN: Generación de PDF Oficial Compacto y Elegante
+# FUNCIÓN: Generación de PDF Oficial Compacto, Limpio y Elegante
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -141,6 +141,9 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
         cod = str(fila["Código"])
         marca = str(fila["Marca"])
         desc = str(fila["Descripción Catálogo"]).replace("✨ [Historial] ", "").replace("⚠️ (Match sugerido) ", "")
+        
+        # Filtro de protección contra emojis para evitar errores de codificación en fuentes nativas PDF
+        desc = desc.encode('latin-1', 'ignore').decode('latin-1')
         p_unit = f"${float(fila['Precio Final (Neto)']):,.0f}"
         cant = str(int(fila["Cantidad"]))
         total = f"${float(fila['Total Neto']):,.0f}"
@@ -158,7 +161,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
         
     pdf.ln(4)
     
-    # Bloque Económico
+    # Bloque de Cierre Económico
     pdf.set_font("helvetica", "B", 10)
     pdf.cell(125, 6, "", border=0)
     pdf.cell(30, 6, "SUBTOTAL:", border=1, align="L")
@@ -249,6 +252,9 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"
     ws["A7"].font = font_negrita
     
+    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
+    ws["A8"].font = font_normal
+    
     titulos_columnas = ["CODIGO", "MARCA", "DESCRIPCIÓN", "PRECIO UNITARIO NETO", "CANTIDAD", "PRECIO UNITARIO TOTAL", "IMAGEN REFERENCIAL"]
     fila_tabla_inicio = 10
     
@@ -258,6 +264,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         celda.fill = fill_azul_header
         celda.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         celda.border = borde_delgado
+    ws.row_dimensions[fila_tabla_inicio].height = 28
     
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
@@ -292,23 +299,60 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         
         for c_idx in range(1, 8):
             ws.cell(row=fila_actual, column=c_idx).border = borde_delgado
+            ws.cell(row=fila_actual, column=c_idx).font = font_normal
         ws.row_dimensions[fila_actual].height = 65  
         fila_actual += 1
         
+    ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
+    
     celda_lbl_sub = ws.cell(row=fila_actual, column=5, value="SUBTOTAL")
+    celda_lbl_sub.font = font_negrita
+    celda_lbl_sub.alignment = Alignment(horizontal="right", vertical="center")
+    celda_lbl_sub.border = borde_delgado
+    
     celda_val_sub = ws.cell(row=fila_actual, column=6, value=total_neto)
+    celda_val_sub.font = font_negrita
     celda_val_sub.number_format = '$#,##0'
+    celda_val_sub.alignment = Alignment(horizontal="right", vertical="center")
+    celda_val_sub.border = borde_delgado
     fila_actual += 1
     
     celda_lbl_iva = ws.cell(row=fila_actual, column=5, value="IVA")
+    celda_lbl_iva.font = font_negrita
+    celda_lbl_iva.alignment = Alignment(horizontal="right", vertical="center")
+    celda_lbl_iva.border = borde_delgado
+    
     celda_val_iva = ws.cell(row=fila_actual, column=6, value=iva)
+    celda_val_iva.font = font_negrita
     celda_val_iva.number_format = '$#,##0'
+    celda_val_iva.alignment = Alignment(horizontal="right", vertical="center")
+    celda_val_iva.border = borde_delgado
     fila_actual += 1
     
+    ws.cell(row=fila_actual, column=1, value="Condiciones de Venta:").font = font_negrita
+    
     celda_lbl_tot = ws.cell(row=fila_actual, column=5, value="TOTAL")
+    celda_lbl_tot.font = font_negrita
+    celda_lbl_tot.alignment = Alignment(horizontal="right", vertical="center")
+    celda_lbl_tot.border = borde_delgado
+    
     celda_val_tot = ws.cell(row=fila_actual, column=6, value=total_bruto)
+    celda_val_tot.font = font_negrita
     celda_val_tot.fill = fill_totales
     celda_val_tot.number_format = '$#,##0'
+    celda_val_tot.alignment = Alignment(horizontal="right", vertical="center")
+    celda_val_tot.border = borde_delgado
+    fila_actual += 1
+    
+    ws.cell(row=fila_actual, column=1, value="1: Plazo de entrega por confirmar").font = font_normal
+    fila_actual += 1
+    ws.cell(row=fila_actual, column=1, value="2. Validez de cotización: 7 días").font = font_normal
+    ws.cell(row=fila_actual, column=7, value="Enrique Hernández P.").font = font_firma
+    ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
+    fila_actual += 1
+    ws.cell(row=fila_actual, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
+    ws.cell(row=fila_actual, column=7, value="VGM SpA").font = font_negrita
+    ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     
     ws.column_dimensions['A'].width = 14
     ws.column_dimensions['B'].width = 14
@@ -321,7 +365,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     wb.save(output)
     return output.getvalue()
 
-# AUTODETECCIÓN DE LOGO
+# AUTODETECCIÓN DE LOGO CORPORATIVO
 logo_bytes = None
 for ext in ["png", "jpg", "jpeg"]:
     if os.path.exists(f"logo.{ext}"):
@@ -329,7 +373,7 @@ for ext in ["png", "jpg", "jpeg"]:
             logo_bytes = f.read()
         break
 
-# Interfaz de Usuario Lateral
+# Interfaz de Usuario Lateral (Sidebar)
 with st.sidebar:
     st.subheader("💼 Datos de la Cotización")
     nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej: José Mendoza")
@@ -340,8 +384,8 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("🖼️ Branding & Fotos")
-    logo_empresa = st.file_uploader("Sube o reemplaza el logo", type=["png", "jpg", "jpeg"])
-    fotos_productos = st.file_uploader("Sube las fotos de los productos", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+    logo_empresa = st.file_uploader("Sube o reemplaza el logo corporativo", type=["png", "jpg", "jpeg"])
+    fotos_productos = st.file_uploader("Sube las fotos de esta cotización", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
     
     st.markdown("---")
     api_key = None
@@ -363,21 +407,26 @@ df_catalogo = leer_csv_tolerante("lista_vigente.csv")
 df_historial = leer_csv_tolerante("historial_ventas.csv")
 
 if df_catalogo is None:
-    st.error("❌ Falta 'lista_vigente.csv'")
+    st.error("❌ No se encontró el catálogo 'lista_vigente.csv' en GitHub.")
     st.stop()
 
 input_listo = False
 contenido_para_gemini = []
 
 prompt_extraccion = """
-Analiza detalladamente esta solicitud de pedido. Extrae cada producto solicitado y su cantidad precisa. Genera de 4 a 6 sinónimos o términos técnicos.
-Reglas:
-- Punta corona o llaves combinadas = Familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Marcas: YATO (1ra opc), ANDES-SAM (2da opc).
-- Dados torx sueltos o individuales (Ej: Dado torx 30 -27) = Buscar códigos de dados individuales, NUNCA juegos completos.
-- Pistola neumática = 'YT09511'. Linternas imantadas = 'YT08518'. Linternas de cabeza = 'L-HEAD-1'.
-- Dados impacto = Líneas pesadas ('YT1041', 'YT1039').
+Analiza detalladamente esta solicitud de pedido (puede ser imagen, texto o PDF). Extrae cada producto solicitado y su cantidad precisa. Genera de 4 a 6 sinónimos o términos técnicos.
 
-Devuelve ÚNICAMENTE un JSON puro con esta estructura:
+⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
+1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
+2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
+3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
+4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
+5. PUNTA CORONA / LLAVES COMBINADAS: Deben ser estrictamente de la familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Queda terminantemente prohibido elegir llaves con chicharra a menos que se solicite explícitamente de forma textual. Dar obligatoriamente como primera opción la marca 'YATO', y como segunda opción 'ANDES-SAM'.
+6. DADOS TORX DE CUADRANTE 1/2: Filtrar y priorizar exclusivamente los códigos de dados Torx con encastre o cuadrante de 1/2" del catálogo.
+7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos clave: YT1041, YT1039 u homólogos de impacto).
+8. DADOS TORX SUELTOS / INDIVIDUALES (Ej: Torx 30, Torx 27 o textos independientes tipo 'Dado torx 30 -27'): Si el cliente pide dados Torx sueltos o individuales, se deben seleccionar obligatoriamente los códigos de dados individuales correspondientes del catálogo (NUNCA juegos completos), respetando las medidas indicadas por el cliente.
+
+Devuelve ÚNICAMENTE un JSON puro con esta estructura, sin bloques markdown:
 {
     "productos": [
         {"busqueda": "Nombre original", "cantidad": 1, "sinonimos": ["t1", "t2"]}
@@ -422,18 +471,16 @@ if input_listo and api_key:
             df['__cod_clean'] = df[col_codigo].apply(normalizar_texto)
             
             response = model.generate_content(contenido_para_gemini)
-            datos_pedido = json.loads(response.text.strip().replace("```json", "").replace("
-```", ""))
+            datos_pedido = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
             lista_productos = datos_pedido.get("productos", [])
             
-            cantidades_dict = {item.get("busqueda", ""): int(item.get("cantidad", 1)) for item in lista_productos}
+            cantidades_dict = {item.get("busqueda", ""): int(item.get("cantidad", 1)) if item.get("cantidad") is not None else 1 for item in lista_productos}
             candidates_rag = {}
             
             for item in lista_productos:
                 termino = item.get("busqueda", "")
                 if not termino: continue
                 
-                # CORRECCIÓN: Filtrado correcto y plano de palabras clave sin romper hash
                 palabras_flat = set()
                 for t in [termino] + item.get("sinonimos", []):
                     for p in limpiar_plurales(normalizar_texto(t)).split():
@@ -448,7 +495,7 @@ if input_listo and api_key:
                     return sum(5 for p in palabras_flat if p in txt_inv)
                 
                 df['__tmp_score'] = df.apply(score_prefiltrado, axis=1)
-                df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(30)
+                df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(40)
                 
                 cand_list = []
                 for _, r in df_filtrado.iterrows():
@@ -457,7 +504,11 @@ if input_listo and api_key:
                     })
                 candidates_rag[termino] = cand_list
 
-            prompt_resolucion = "Mapea los candidatos al mejor código respetando las reglas de llaves estándar, dados sueltos e impacto:\n" + json.dumps(candidates_rag)
+            prompt_resolucion = """
+            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA.
+            Mapea los candidatos al mejor código respetando estrictamente las reglas comerciales de llaves estándar tradicionales, dados Torx sueltos de encastre individual y dados de impacto pesado.
+            """ + json.dumps(candidates_rag, ensure_ascii=False)
+            
             response_resolucion = model.generate_content(prompt_resolucion)
             datos_finales = json.loads(response_resolucion.text.strip().replace("```json", "").replace("```", ""))
             
@@ -477,7 +528,7 @@ if input_listo and api_key:
                         px_lista = float(limpiar_precio(match_rows.iloc[0][col_precio]))
                         if col_marca: marca = str(match_rows.iloc[0][col_marca]).upper()
                 
-                # Jerarquía comercial
+                # Jerarquía comercial optimizada por Enrique
                 precio_manual_val = limpiar_precio(precio_manual_input)
                 if precio_manual_val > 0:
                     px_final_neto = precio_manual_val
@@ -486,7 +537,7 @@ if input_listo and api_key:
                     px_final_neto = px_lista - (px_lista * (descuento_aplicar / 100))
                     texto_desc = f"{descuento_aplicar}%"
                 else:
-                    # CORRECCIÓN: Búsqueda dinámica e impecable en el cerebro histórico ERP
+                    # Búsqueda impecable en el cerebro histórico ERP Ventas
                     precio_historico = False
                     ultimo_px = 0.0
                     if df_historial is not None and cod != "MANUAL" and empresa_cliente:
@@ -516,67 +567,4 @@ if input_listo and api_key:
                 
                 cotizacion_final.append({
                     "Código": cod, "Marca": marca, "Descripción Catálogo": desc, "Cantidad": cant,
-                    "Precio Lista (Neto)": px_lista, "Descuento Aplicado": texto_desc,
-                    "Precio Final (Neto)": px_final_neto, "Total Neto": px_final_neto * cant
-                })
-            
-            if cotizacion_final:
-                st.session_state['df_resultado'] = pd.DataFrame(cotizacion_final)
-                st.session_state['nombre_cliente_s'] = nombre_cliente
-                st.session_state['empresa_cliente_s'] = empresa_cliente
-                st.session_state['numero_folio_s'] = numero_folio
-                st.session_state['subtotal_lista'] = sum(x["Precio Lista (Neto)"] * x["Cantidad"] for x in cotizacion_final)
-                st.session_state['total_neto_final'] = sum(x["Total Neto"] for x in cotizacion_final)
-                st.session_state['descuento_total_pesos'] = max(st.session_state['subtotal_lista'] - st.session_state['total_neto_final'], 0.0)
-                st.session_state['iva_calculado'] = st.session_state['total_neto_final'] * 0.19
-                st.session_state['total_bruto'] = st.session_state['total_neto_final'] + st.session_state['iva_calculado']
-                st.success("¡Operación completada con éxito!")
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-# RENDERIZADO DESDE MEMORIA (Evita el borrado por interacción en el celular)
-if st.session_state['df_resultado'] is not None:
-    st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
-    st.dataframe(
-        st.session_state['df_resultado'].style.format({
-            "Precio Lista (Neto)": "${:,.0f}", "Precio Final (Neto)": "${:,.0f}", "Total Neto": "${:,.0f}", "Cantidad": "{:,.0f}"
-        }),
-        use_container_width=True
-    )
-    
-    st.markdown("### 📊 Desglose Económico")
-    c_neto, c_desc, c_neto_f, c_iva, c_bruto = st.columns(5)
-    c_neto.metric(label="Total Lista Neto", value=f"${st.session_state['subtotal_lista']:,.0f}")
-    c_desc.metric(label="Descuento Otorgado", value=f"-${st.session_state['descuento_total_pesos']:,.0f}")
-    c_neto_f.metric(label="Neto Final Cliente", value=f"${st.session_state['total_neto_final']:,.0f}")
-    c_iva.metric(label="IVA (19%)", value=f"${st.session_state['iva_calculado']:,.0f}")
-    c_bruto.metric(label="Total Bruto", value=f"${st.session_state['total_bruto']:,.0f}")
-    
-    st.markdown("---")
-    
-    logo_data = logo_empresa.getvalue() if logo_empresa else logo_bytes
-    dict_img = {os.path.splitext(f.name)[0].strip().lower(): f.getvalue() for f in fotos_productos} if fotos_productos else {}
-    
-    excel_bin = generar_excel_comercial(
-        st.session_state['df_resultado'], st.session_state['nombre_cliente_s'], st.session_state['empresa_cliente_s'],
-        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'], logo_data, dict_img
-    )
-    
-    pdf_bin = bytes(generar_pdf_comercial(
-        st.session_state['df_resultado'], st.session_state['nombre_cliente_s'], st.session_state['empresa_cliente_s'],
-        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto']
-    ))
-    
-    c_down1, c_down2 = st.columns(2)
-    with c_down1:
-        st.download_button(
-            label="🟢 Descargar Documento Excel Premium (.xlsx)", data=excel_bin,
-            file_name=f"Cotizacion_{st.session_state['numero_folio_s']}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
-        )
-    with c_down2:
-        st.download_button(
-            label="🔴 Descargar Documento PDF Oficial (.pdf)", data=pdf_bin,
-            file_name=f"Cotizacion_{st.session_state['numero_folio_s']}.pdf", mime="application/pdf", use_container_width=True
-        )
-else:
-    st.info("Introduce una solicitud arriba y presiona Generar para activar los paneles comerciales.")
+                    "Precio Lista (Neto)": px_lista, "Descuento Aplicado": texto
