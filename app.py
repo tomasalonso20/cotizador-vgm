@@ -23,6 +23,8 @@ if 'df_resultado' not in st.session_state:
     st.session_state['nombre_cliente_s'] = ""
     st.session_state['empresa_cliente_s'] = ""
     st.session_state['numero_folio_s'] = ""
+    st.session_state['condicion_pago_s'] = "CONTADO"
+    st.session_state['vendedor_s'] = "Enrique Hernández P."
     st.session_state['total_neto_final'] = 0.0
     st.session_state['subtotal_lista'] = 0.0
     st.session_state['descuento_total_pesos'] = 0.0
@@ -100,7 +102,7 @@ def leer_csv_tolerante(ruta_archivo):
     return None
 
 # FUNCIÓN: Generación de PDF Comercial Oficial idéntico al Excel corporativo
-def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None):
+def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
     
@@ -195,9 +197,9 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.ln(8)
     
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(120, 5, "Condiciones de Pago: CONTADO", ln=0)
+    pdf.cell(120, 5, f"Condiciones de Pago: {condicion_pago.upper()}", ln=0)
     pdf.set_font("helvetica", "BI", 11)
-    pdf.cell(70, 5, "Enrique Hernández P.", ln=1, align="R")
+    pdf.cell(70, 5, f"{vendedor}", ln=1, align="R")
     
     pdf.set_font("helvetica", "", 10)
     pdf.cell(120, 5, "A la espera de sus comentarios, le saluda atentamente :", ln=0)
@@ -207,7 +209,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     return pdf.output()
 
 # FUNCIÓN: Generación de Excel Comercial Oficial (Sin Líneas de Cuadrícula, 1 Página de Ancho)
-def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None):
+def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -365,10 +367,10 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws.cell(row=fila_actual, column=1, value="1: Plazo de entrega por confirmar").font = font_normal
     fila_actual += 1
     ws.cell(row=fila_actual, column=1, value="2. Validez de cotización: 7 días").font = font_normal
-    ws.cell(row=fila_actual, column=7, value="Enrique Hernández P.").font = font_firma
+    ws.cell(row=fila_actual, column=7, value=vendedor).font = font_firma
     ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     fila_actual += 1
-    ws.cell(row=fila_actual, column=1, value="Condiciones de Pago: CONTADO").font = font_negrita
+    ws.cell(row=fila_actual, column=1, value=f"Condiciones de Pago: {condicion_pago.upper()}").font = font_negrita
     ws.cell(row=fila_actual, column=7, value="VGM SpA").font = font_negrita
     ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     
@@ -393,7 +395,6 @@ for ext in ["png", "jpg", "jpeg"]:
 
 # Interfaz de Usuario Lateral (Sidebar)
 with st.sidebar:
-    # MODIFICACIÓN: La sección del motor de IA pasa a la parte superior de la barra lateral
     st.subheader("🔑 Motor de Inteligencia")
     api_key = None
     if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"].strip():
@@ -409,10 +410,13 @@ with st.sidebar:
     nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej: José Mendoza")
     empresa_cliente = st.text_input("Empresa / Entidad:", placeholder="Ej: Llantas del Pacífico")
     numero_folio = st.text_input("Número de Cotización:", value="EHP-TSA-2026")
+    
+    # AJUSTE ENRIQUE: Nuevos campos solicitados para condiciones dinámicas y equipo de oficina
+    condicion_pago_input = st.text_input("Condición de Pago:", value="CONTADO", placeholder="Ej: CREDITO 30 Y 60 DIAS")
+    vendedor_input = st.text_input("Vendedor:", value="Enrique Hernández P.", placeholder="Nombre de quien cotiza")
+    
     descuento_aplicar = st.number_input("Descuento a aplicar (%)", min_value=0, max_value=100, value=0, step=1)
     precio_manual_input = st.text_input("Precio Neto Fijo Alternativo (Opcional):", placeholder="Ej: 500000")
-    
-    # MODIFICACIÓN: Se eliminó la sección redundante de "Branding" con el aviso de logo cargado
 
 st.subheader("1. Carga la Solicitud del Cliente (Elige el formato)")
 tab_imagen, tab_texto, tab_pdf = st.tabs(["📸 Pantallazo / Imagen", "✍️ Copiar-Pegar Texto", "📄 Archivo PDF"])
@@ -596,6 +600,8 @@ if input_listo and api_key:
                 st.session_state['nombre_cliente_s'] = nombre_cliente
                 st.session_state['empresa_cliente_s'] = empresa_cliente
                 st.session_state['numero_folio_s'] = numero_folio
+                st.session_state['condicion_pago_s'] = condicion_pago_input
+                st.session_state['vendedor_s'] = vendedor_input
                 st.session_state['subtotal_lista'] = sum(x["Precio Lista (Neto)"] * x["Cantidad"] for x in cotizacion_final)
                 st.session_state['total_neto_final'] = sum(x["Total Neto"] for x in cotizacion_final)
                 st.session_state['descuento_total_pesos'] = max(st.session_state['subtotal_lista'] - st.session_state['total_neto_final'], 0.0)
@@ -627,15 +633,17 @@ if st.session_state['df_resultado'] is not None:
     
     dict_img = {}
     
-    # Renderizar archivos usando directamente la base fija del servidor
+    # Inyección dinámica de variables al generar archivos para permitir edición fluida post-búsqueda
     excel_bin = generar_excel_comercial(
-        st.session_state['df_resultado'], st.session_state['nombre_cliente_s'], st.session_state['empresa_cliente_s'],
-        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'], logo_bytes, dict_img
+        st.session_state['df_resultado'], nombre_cliente, empresa_cliente, numero_folio,
+        st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'],
+        logo_bytes, dict_img, condicion_pago_input, vendedor_input
     )
     
     pdf_raw = generar_pdf_comercial(
-        st.session_state['df_resultado'], st.session_state['nombre_cliente_s'], st.session_state['empresa_cliente_s'],
-        st.session_state['numero_folio_s'], st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'], logo_bytes
+        st.session_state['df_resultado'], nombre_cliente, empresa_cliente, numero_folio,
+        st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'],
+        logo_bytes, condicion_pago_input, vendedor_input
     )
     pdf_bin = pdf_raw.encode('latin-1') if isinstance(pdf_raw, str) else bytes(pdf_raw)
     
@@ -643,12 +651,12 @@ if st.session_state['df_resultado'] is not None:
     with c_down1:
         st.download_button(
             label="🟢 Descargar Documento Excel Premium (.xlsx)", data=excel_bin,
-            file_name=f"Cotizacion_{st.session_state['numero_folio_s']}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
+            file_name=f"Cotizacion_{numero_folio}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
         )
     with c_down2:
         st.download_button(
             label="🔴 Descargar Documento PDF Oficial (.pdf)", data=pdf_bin,
-            file_name=f"Cotizacion_{st.session_state['numero_folio_s']}.pdf", mime="application/pdf", use_container_width=True
+            file_name=f"Cotizacion_{numero_folio}.pdf", mime="application/pdf", use_container_width=True
         )
 else:
     st.info("Introduce una solicitud arriba y presiona Generar para activar los paneles comerciales.")
