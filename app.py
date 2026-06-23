@@ -74,7 +74,7 @@ def leer_csv_tolerante(ruta_archivo):
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if modificaciones := coincidencias >= 2:
+                    if coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -95,15 +95,15 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws = wb.active
     ws.title = "Cotización"
     
-    # CAMBIO 1: Eliminar líneas de cuadrícula para un acabado limpio y blanco
+    # Eliminar líneas de cuadrícula para un acabado limpio y blanco
     ws.views.sheetView[0].showGridLines = False
     
-    # CAMBIO 2: Forzar el área de impresión a que encaje exactamente en 1 hoja de ancho
+    # Forzar el área de impresión a que encaje exactamente en 1 hoja de ancho
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
     
-    # CAMBIO 3: Remover todos los márgenes para aprovechar el espacio al 100% en terreno
+    # Remover todos los márgenes para aprovechar el espacio al 100% en terreno
     ws.page_margins.left = 0
     ws.page_margins.right = 0
     ws.page_margins.top = 0
@@ -344,7 +344,7 @@ with tab_pdf:
 df_catalogo = leer_csv_tolerante("lista_vigente.csv")
 
 if df_catalogo is not None:
-    st.success("✅ Cerebro comercial 'lista_vigente.csv' connected y estructurado con éxito.")
+    st.success("✅ Cerebro comercial 'lista_vigente.csv' conectado y estructurado con éxito.")
 else:
     st.error("❌ No se encontró o no se pudo mapear 'lista_vigente.csv' en GitHub. Por favor súbelo para activar la app.")
     st.stop()
@@ -361,7 +361,7 @@ else:
 input_listo = False
 contenido_para_gemini = []
 
-# Base del prompt extractor con tus reglas comerciales incrustadas
+# Base del prompt extractor con tus reglas comerciales incrustadas y la nueva regla de dados Torx sueltos
 prompt_extraccion = """
 Analiza detalladamente esta solicitud de pedido (puede ser una imagen, un bloque de texto o un documento PDF). Extrae cada producto solicitado y su cantidad precisa.
 Además, para cada producto genera una lista de 4 a 6 sinónimos o términos técnicos comerciales en español que se usen comúnmente en los catálogos de herramientas industriales.
@@ -371,6 +371,7 @@ CRÍTICO PARA LA EXPANSIÓN SEMÁNTICA:
 - Si detectas 'Linterna imantada' o similar, incluye obligatoriamente: 'lampara trabajo', 'iman', 'led', 'funcional', 'cob'.
 - Si detectas 'Linterna led de cabeza', 'linterna de cabeza' o 'frontal', incluye obligatoriamente: 'l-head-1', 'l_head_1', 'cabeza', 'frontal', 'cintillo'. NO agregues el término 'imantada'.
 - Si detectas 'Punta corona' o 'llaves combinadas', especifica rigurosamente en los sinónimos que pertenecen a la familia ESTÁNDAR TRADICIONAL, SIN chicharra (no ratchet), e inyecta palabras clave de marca: 'yato', 'andes sam', 'andes-sam'.
+- Si detectas 'Dados torx' sueltos o individuales (como Torx 30, Torx 27 o textos tipo 'Dado torx 30 -27'), asegúrate de buscar dados individuales independientes en lugar de un set o juego completo.
 - Si detectas 'Dados torx' y menciona o se asocia a cuadrante de 1/2, busca explícitamente encastre '1/2' o 'cuadrante 1/2'.
 - Si detectas 'Dados de impacto', inyecta sinónimos asociados a líneas pesadas de impacto tipo 'yt1041', 'yt1039'.
 
@@ -484,7 +485,8 @@ if df_catalogo is not None and input_listo and api_key:
             5. PUNTA CORONA / LLAVES COMBINADAS: Deben ser estrictamente de la familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Queda terminantemente prohibido elegir llaves con chicharra a menos que se solicite explícitamente de forma textual. Dar obligatoriamente como primera opción la marca 'YATO', y como segunda opción 'ANDES-SAM'.
             6. DADOS TORX DE CUADRANTE 1/2: Filtrar y priorizar exclusivamente los códigos de dados Torx con encastre o cuadrante de 1/2" del catálogo.
             7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos clave: YT1041, YT1039 u homólogos de impacto).
-            8. FILTRO ESTRICTO NO ENCONTRADO: Si no calza nada lógico, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
+            8. DADOS TORX SUELTOS / INDIVIDUALES (Ej: Torx 30, Torx 27 o textos independientes tipo 'Dado torx 30 -27'): Si el cliente pide dados Torx sueltos o individuales, se deben seleccionar obligatoriamente los códigos de dados individuales correspondientes del catálogo (NUNCA juegos completos), respetando las medidas indicadas por el cliente.
+            9. FILTRO ESTRICTO NO ENCONTRADO: Si no calza nada lógico, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
             
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             """ + json.dumps(candidates_rag, ensure_ascii=False, indent=2) + """
