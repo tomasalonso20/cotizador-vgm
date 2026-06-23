@@ -85,7 +85,7 @@ def leer_csv_tolerante(ruta_archivo):
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if modificaciones := coincidencias >= 2:
+                    if coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -393,6 +393,18 @@ for ext in ["png", "jpg", "jpeg"]:
 
 # Interfaz de Usuario Lateral (Sidebar)
 with st.sidebar:
+    # MODIFICACIÓN: La sección del motor de IA pasa a la parte superior de la barra lateral
+    st.subheader("🔑 Motor de Inteligencia")
+    api_key = None
+    if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"].strip():
+        api_key = st.secrets["GEMINI_API_KEY"]
+        st.success("🔑 Motor Gemini autenticado.")
+    else:
+        api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
+        if api_key.strip():
+            st.success("🔑 Motor Gemini autenticado.")
+            
+    st.markdown("---")
     st.subheader("💼 Datos de la Cotización")
     nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej: José Mendoza")
     empresa_cliente = st.text_input("Empresa / Entidad:", placeholder="Ej: Llantas del Pacífico")
@@ -400,23 +412,7 @@ with st.sidebar:
     descuento_aplicar = st.number_input("Descuento a aplicar (%)", min_value=0, max_value=100, value=0, step=1)
     precio_manual_input = st.text_input("Precio Neto Fijo Alternativo (Opcional):", placeholder="Ej: 500000")
     
-    st.markdown("---")
-    st.subheader("🖼️ Branding")
-    
-    if logo_bytes:
-        st.success("✅ Logo institucional autodetectado con éxito.")
-    else:
-        st.error("⚠️ No se encontró 'logo.png' en el servidor.")
-        
-    # AJUSTE ENRIQUE: Se eliminó el cargador temporal de fotos de productos para limpiar la pantalla móvil
-    
-    st.markdown("---")
-    api_key = None
-    if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"].strip():
-        api_key = st.secrets["GEMINI_API_KEY"]
-        st.success("🔑 Motor Gemini autenticado.")
-    else:
-        api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
+    # MODIFICACIÓN: Se eliminó la sección redundante de "Branding" con el aviso de logo cargado
 
 st.subheader("1. Carga la Solicitud del Cliente (Elige el formato)")
 tab_imagen, tab_texto, tab_pdf = st.tabs(["📸 Pantallazo / Imagen", "✍️ Copiar-Pegar Texto", "📄 Archivo PDF"])
@@ -629,7 +625,6 @@ if st.session_state['df_resultado'] is not None:
     
     st.markdown("---")
     
-    # AJUSTE ENRIQUE: Las imágenes quedan vacías por ahora hasta que automaticemos el mapeo
     dict_img = {}
     
     # Renderizar archivos usando directamente la base fija del servidor
