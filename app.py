@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Móvil Ultra-Eficiente)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Inteligente Premium V2)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -38,7 +38,7 @@ def limpiar_plurales(texto):
             limpias.append(p)
     return " ".join(limpias)
 
-# LIMPIADOR MEJORADO: Formatea a números enteros limpios sin decimales molestos
+# LIMPIADOR DE PRECIOS: Formatea a números enteros limpios sin decimales molestos
 def limpiar_precio(valor):
     if pd.isna(valor):
         return 0.0
@@ -47,19 +47,17 @@ def limpiar_precio(valor):
     val_str = str(valor).strip().replace("$", "").replace(" ", "")
     if not val_str:
         return 0.0
-    # Cortar decimales de centavos comunes en exportaciones (,00 o .00)
     if "," in val_str and val_str.count(",") == 1 and len(val_str.split(",")[-1]) <= 2:
         val_str = val_str.split(",")[0]
     if "." in val_str and val_str.count(".") == 1 and len(val_str.split(".")[-1]) <= 2:
         val_str = val_str.split(".")[0]
-    # Remover separadores de miles restantes
     val_str = val_str.replace(".", "").replace(",", "")
     try:
         return float(int(val_str))
     except:
         return 0.0
 
-# FUNCIÓN MAESTRA BLINDADA: Valida que existan al menos 2 columnas reales para evitar falsos positivos con títulos
+# FUNCIÓN MAESTRA BLINDADA: Detecta cabeceras reales ignorando títulos superiores del ERP
 def leer_csv_tolerante(ruta_archivo):
     if not os.path.exists(ruta_archivo):
         return None
@@ -164,7 +162,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
         
-        # Limpiar prefijos de diagnóstico para que el Excel oficial vaya impecable
         desc_excel = str(fila["Descripción Catálogo"]).replace("✨ [Historial] ", "").replace("⚠️ (Match sugerido) ", "")
         ws.cell(row=fila_actual, column=3, value=desc_excel).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         
@@ -361,19 +358,20 @@ if df_catalogo is not None and imagen_pedido and api_key:
             Analiza detalladamente esta imagen de pedido o correo de solicitud. Extrae cada producto solicitado y su cantidad.
             Además, para cada producto genera una lista de 4 a 6 sinónimos o términos técnicos comerciales en español que se usen comúnmente en los catálogos de herramientas industriales.
             
-            CRÍTICO PARA LA EXPANSIÓN:
+            CRÍTICO PARA LA EXPANSIÓN SEMÁNTICA:
             - Si detectas 'Pistola neumática' o similar, incluye obligatoriamente: 'llave impacto', 'neumatica', 'aire', 'cuadrante', '550', 'std'.
             - Si detectas 'Linterna imantada' o similar, incluye obligatoriamente: 'lampara trabajo', 'iman', 'led', 'funcional', 'cob'.
-            - Si detectas 'Linterna led de cabeza', 'linterna de cabeza', 'lampara de cabeza' o 'frontal', incluye obligatoriamente: 'l-head-1', 'l_head_1', 'cabeza', 'frontal', 'cintillo'. NO agregues el término 'imantada'.
-            - Si detectas 'Correas multinervadas' o 'elasticas', incluye obligatoriamente: 'extractor', 'instalador', 'montaje', 'desmontaje', 'correa', 'puesta punto'.
-            - Si detectas 'Llave de impacto inalámbrica' o similar, incluye obligatoriamente: 'yt8277935', 'yt8277925', 'bateria', 'inalambrico', 'torque'.
+            - Si detectas 'Linterna led de cabeza', 'linterna de cabeza' o 'frontal', incluye obligatoriamente: 'l-head-1', 'l_head_1', 'cabeza', 'frontal', 'cintillo'. NO agregues el término 'imantada'.
+            - Si detectas 'Punta corona' o 'llaves combinadas', incluye obligatoriamente como palabras clave de marca: 'yato', 'andes sam', 'andes-sam'.
+            - Si detectas 'Dados torx' y menciona o se asocia a cuadrante de 1/2, busca explícitamente encastre '1/2' o 'cuadrante 1/2'.
+            - Si detectas 'Dados de impacto', inyecta sinónimos asociados a líneas pesadas de impacto tipo 'yt1041', 'yt1039'.
             
             Devuelve el resultado ÚNICAMENTE en un formato JSON puro, sin textos introductorios, usando exactamente esta estructura:
             {
                 "productos": [
                     {
                         "busqueda": "Nombre original en el pedido", 
-                        "cantidad": 2,
+                        "cantidad": 1,
                         "sinonimos": ["termino1", "termino2", "termino3", "termino4"]
                     }
                 ]
@@ -422,18 +420,21 @@ if df_catalogo is not None and imagen_pedido and api_key:
                     
                 candidates_rag[termino] = cand_list
 
-            st.info("🔄 Fase 3: Resolviendo códigos y auditando jerarquía comercial...")
+            st.info("🔄 Fase 3: Resolviendo códigos y aplicando jerarquía de asignación...")
             
             prompt_resolucion = """
             Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
-            ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN:
+            ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
             1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
-            2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
+            2. LINTERNAS LARGAS / IMANTADAS: Código predilectas es 'YT08518'.
             3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
             4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
-            5. FILTRO ESTRICTO NO ENCONTRADO: Si no calza, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
+            5. PUNTA CORONA / LLAVES COMBINADAS: Dar obligatoriamente como primera opción la marca 'YATO'. Si no está, usar 'ANDES-SAM' como segunda opción.
+            6. DADOS TORX DE CUADRANTE 1/2: Filtrar y priorizar exclusivamente los códigos de dados Torx con encastre o cuadrante de 1/2" del catálogo.
+            7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos de referencia clave: YT1041, YT1039 u homólogos de la línea de impacto).
+            8. FILTRO ESTRICTO NO ENCONTRADO: Si no calza nada lógico, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
             
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             """ + json.dumps(candidates_rag, ensure_ascii=False, indent=2) + """
@@ -492,7 +493,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 elif not res.get("coincidencia_exacta", True):
                     desc = f"⚠️ (Match sugerido) {desc}"
                 
-                # JERARQUÍA COMERCIAL OPTIMIZADA
+                # JERARQUÍA COMERCIAL OPTIMIZADA POR ENRIQUE
                 precio_manual_val = limpiar_precio(precio_manual_input)
                 
                 if precio_manual_val > 0:
@@ -502,7 +503,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
                     px_final_neto = px_lista - (px_lista * (descuento_aplicar / 100))
                     texto_descuento_col = f"{descuento_aplicar}%"
                 else:
-                    # Modo manos libres: si no hay descuento ni precio especial, busca historial previo
+                    # Si no hay descuento ni precio manual, gatilla auditoría en el Historial de Ventas ERP
                     precio_historico_encontrado = False
                     ultimo_precio_cobrado = 0.0
                     
@@ -545,7 +546,6 @@ if df_catalogo is not None and imagen_pedido and api_key:
                 # VISTA PREMIUM OPTIMIZADA PARA PANTALLAZOS EN EL CELULAR
                 st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
                 
-                # Aplicamos formateo de moneda sin decimales (.0) y con separadores limpios
                 df_formateado = df_resultado.copy()
                 st.dataframe(
                     df_formateado.style.format({
