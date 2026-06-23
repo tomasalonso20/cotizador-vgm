@@ -16,7 +16,7 @@ from fpdf import FPDF
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
 
-# AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR (Movido al inicio para la cabecera web)
+# AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR
 logo_bytes = None
 for ext in ["png", "jpg", "jpeg"]:
     if os.path.exists(f"logo.{ext}"):
@@ -24,47 +24,13 @@ for ext in ["png", "jpg", "jpeg"]:
             logo_bytes = f.read()
         break
 
-# DISEÑO DE CABECERA CORPORATIVA: Título a la izquierda y Logo pequeño a la derecha
+# DISEÑO DE CABECERA: Título formal a la izquierda y Logo pequeño a la derecha
 col_titulo, col_logo = st.columns([6, 1])
 with col_titulo:
     st.title("Cotizador Express - VGM SpA 🔧")
 with col_logo:
     if logo_bytes:
-        # Muestra el logo institucional en un tamaño sutil y limpio en la esquina superior derecha
         st.image(io.BytesIO(logo_bytes), width=110)
-
-# INYECCIÓN DE COLORES CORPORATIVOS EN LA INTERFAZ WEB
-st.markdown("""
-    <style>
-    /* Color del azul corporativo principal para todos los títulos */
-    h1, h2, h3, h4, h5, h6 {
-        color: #1F497D !important;
-    }
-    /* Estilo corporativo premium para el botón principal de Generar */
-    div.stButton > button:first-child {
-        background-color: #365F91 !important;
-        color: white !important;
-        border: none !important;
-        padding: 0.6rem 1.2rem !important;
-        border-radius: 4px !important;
-        font-weight: bold !important;
-    }
-    /* Efecto de cambio de tono al pasar el cursor sobre el botón (Hover) */
-    div.stButton > button:first-child:hover {
-        background-color: #1F497D !important;
-        color: white !important;
-        border: none !important;
-    }
-    /* Estilo limpio para las pestañas de carga (Tabs) */
-    button[data-baseweb="tab"] {
-        color: #555555 !important;
-    }
-    button[data-baseweb="tab"][aria-selected="true"] {
-        color: #1F497D !important;
-        border-bottom-color: #1F497D !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
 # Inicializar estados de memoria para evitar que se borren los datos al hacer clic en descargas
 if 'df_resultado' not in st.session_state:
@@ -150,7 +116,7 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN: Generación de PDF Comercial Oficial idéntico al Excel corporativo
+# FUNCIÓN: Generación de PDF Comercial Oficial con el Azul original pulcro
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -257,7 +223,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial (Sin Líneas de Cuadrícula, 1 Página de Ancho)
+# FUNCIÓN: Generación de Excel Comercial Oficial con el Azul original pulcro (Sin Líneas de Cuadrícula)
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -338,7 +304,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
         cod_original = str(fila["Código"])
-        cod_limpio = cod_original.strip().lower()
         
         ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
@@ -356,20 +321,10 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
-        if dict_imagenes and cod_limpio in dict_imagenes:
-            try:
-                img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio])
-                img_excel = OpenpyxlImage(img_prod_stream)
-                img_excel.width = 115
-                img_excel.height = 80
-                ws.add_image(img_excel, f"G{fila_actual}")
-            except:
-                pass
-        
         for c_idx in range(1, 8):
             ws.cell(row=fila_actual, column=c_idx).border = borde_delgado
             ws.cell(row=fila_actual, column=c_idx).font = font_normal
-        ws.row_dimensions[fila_actual].height = 65  
+        ws.row_dimensions[fila_actual].height = 24  
         fila_actual += 1
         
     ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
@@ -434,7 +389,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     wb.save(output)
     return output.getvalue()
 
-# Interfaz de Usuario Lateral (Sidebar)
+# Interfaz de Usuario Lateral NATIVA (Sidebar)
 with st.sidebar:
     st.subheader("🔑 Motor de Inteligencia")
     api_key = None
@@ -574,7 +529,7 @@ if input_listo and api_key:
             1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
             2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
             3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
-            4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
+            4. LLAVES DE IMPACTO INALÁI_BRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
             5. PUNTA CORONA / LLAVES COMBINADAS: Deben ser estrictamente de la familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Queda terminantemente prohibido elegir llaves con chicharra a menos que se solicite explícitamente de forma textual. Dar obligatoriamente como primera opción la marca 'YATO', y como segunda opción 'ANDES-SAM'.
             6. DADOS TORX DE CUADRANTE 1/2: Filtrar y priorizar exclusivamente los códigos de dados Torx con encastre o cuadrante de 1/2" del catálogo.
             7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos clave: YT1041, YT1039 u homólogos de impacto).
@@ -651,7 +606,7 @@ if input_listo and api_key:
         except Exception as e:
             st.error(f"Error en procesamiento comercial: {e}")
 
-# RENDERIZADO ESTABLE DESDE MEMORIA (Previene borrados al interactuar en teléfonos móviles)
+# RENDERIZADO ESTABLE DESDE MEMORIA (Previene parpadeos o borrados en terreno)
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
     st.dataframe(
@@ -673,7 +628,7 @@ if st.session_state['df_resultado'] is not None:
     
     dict_img = {}
     
-    # Inyección dinámica de variables al generar archivos para permitir edición fluida post-búsqueda
+    # Inyección dinámica de variables al generar archivos binarios
     excel_bin = generar_excel_comercial(
         st.session_state['df_resultado'], nombre_cliente, empresa_cliente, numero_folio,
         st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'],
