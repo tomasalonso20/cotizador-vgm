@@ -74,7 +74,7 @@ def leer_csv_tolerante(ruta_archivo):
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if coincidencias >= 2:
+                    if modificaciones := coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -88,16 +88,29 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN: Generación de Excel Comercial Oficial con título combinado, centrado y tamaño 16
+# FUNCIÓN: Generación de Excel Comercial Oficial con título combinado, sin cuadrícula y área de impresión optimizada
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Cotización"
     
-    ws.views.sheetView[0].showGridLines = True
+    # CAMBIO 1: Eliminar líneas de cuadrícula para un acabado limpio y blanco
+    ws.views.sheetView[0].showGridLines = False
     
-    # AJUSTE: Tamaño de letra del título cambiado a 16 para mayor prestancia
+    # CAMBIO 2: Forzar el área de impresión a que encaje exactamente en 1 hoja de ancho
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    
+    # CAMBIO 3: Remover todos los márgenes para aprovechar el espacio al 100% en terreno
+    ws.page_margins.left = 0
+    ws.page_margins.right = 0
+    ws.page_margins.top = 0
+    ws.page_margins.bottom = 0
+    ws.page_margins.header = 0
+    ws.page_margins.footer = 0
+    
     font_titulo = Font(name="Arial", size=16, bold=True, color="1F497D")
     font_cabecera_tabla = Font(name="Arial", size=10, bold=True, color="FFFFFF")
     font_negrita = Font(name="Arial", size=10, bold=True)
@@ -126,7 +139,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         except:
             pass
             
-    # Título combinado y centrado en el encabezado (Columnas A a G) con nueva altura de fila 32
+    # Título combinado y centrado en el encabezado (Columnas A a G) con altura de fila 32 y tamaño 16
     ws.merge_cells("A3:G3")
     celda_tit = ws["A3"]
     celda_tit.value = f"COTIZACIÓN N°{nro_cotiz}"
@@ -331,7 +344,7 @@ with tab_pdf:
 df_catalogo = leer_csv_tolerante("lista_vigente.csv")
 
 if df_catalogo is not None:
-    st.success("✅ Cerebro comercial 'lista_vigente.csv' conectado y estructurado con éxito.")
+    st.success("✅ Cerebro comercial 'lista_vigente.csv' connected y estructurado con éxito.")
 else:
     st.error("❌ No se encontró o no se pudo mapear 'lista_vigente.csv' en GitHub. Por favor súbelo para activar la app.")
     st.stop()
