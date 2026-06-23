@@ -16,7 +16,7 @@ from fpdf import FPDF
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
 
-# AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR (Movido al inicio para la cabecera web)
+# AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR
 logo_bytes = None
 for ext in ["png", "jpg", "jpeg"]:
     if os.path.exists(f"logo.{ext}"):
@@ -30,38 +30,45 @@ with col_titulo:
     st.title("Cotizador Express - VGM SpA 🔧")
 with col_logo:
     if logo_bytes:
-        # Muestra el logo institucional en un tamaño sutil y limpio en la esquina superior derecha
         st.image(io.BytesIO(logo_bytes), width=110)
 
-# INYECCIÓN DE COLORES CORPORATIVOS EN LA INTERFAZ WEB
+# INYECCIÓN DE PALETA CORPORATIVA VGM (Fondo blanco, Letras grises, Acentuación Naranja Sutil)
 st.markdown("""
     <style>
-    /* Color del azul corporativo principal para todos los títulos */
-    h1, h2, h3, h4, h5, h6 {
-        color: #1F497D !important;
+    /* Forzar fondo blanco limpio en toda la aplicación */
+    .stApp {
+        background-color: #FFFFFF !important;
     }
-    /* Estilo corporativo premium para el botón principal de Generar */
+    /* Títulos principales en Gris Corporativo Oscuro */
+    h1, h2 {
+        color: #4A4A4A !important;
+        font-family: 'Arial', sans-serif !important;
+    }
+    /* Subtítulos y etiquetas menores en Gris Medio */
+    h3, h4, h5, h6, label, .stMetric label {
+        color: #666666 !important;
+    }
+    /* Botón de acción principal en Naranja Institucional Sutil */
     div.stButton > button:first-child {
-        background-color: #365F91 !important;
+        background-color: #E67E22 !important;
         color: white !important;
         border: none !important;
         padding: 0.6rem 1.2rem !important;
         border-radius: 4px !important;
         font-weight: bold !important;
     }
-    /* Efecto de cambio de tono al pasar el cursor sobre el botón (Hover) */
+    /* Efecto Hover del botón principal */
     div.stButton > button:first-child:hover {
-        background-color: #1F497D !important;
+        background-color: #D35400 !important;
         color: white !important;
-        border: none !important;
     }
-    /* Estilo limpio para las pestañas de carga (Tabs) */
+    /* Pestañas de carga (Tabs) en armonía con la marca */
     button[data-baseweb="tab"] {
-        color: #555555 !important;
+        color: #777777 !important;
     }
     button[data-baseweb="tab"][aria-selected="true"] {
-        color: #1F497D !important;
-        border-bottom-color: #1F497D !important;
+        color: #E67E22 !important;
+        border-bottom-color: #E67E22 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -150,7 +157,7 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN: Generación de PDF Comercial Oficial idéntico al Excel corporativo
+# FUNCIÓN: Generación de PDF Comercial Oficial alineado a la nueva identidad VGM
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -166,7 +173,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.ln(6)
     
     pdf.set_font("helvetica", "B", 16)
-    pdf.set_text_color(31, 73, 125)
+    pdf.set_text_color(74, 74, 74) # Gris Corporativo VGM
     pdf.cell(0, 10, f"COTIZACIÓN N° {nro_cotiz}", ln=True, align="C")
     pdf.ln(4)
     
@@ -187,7 +194,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.ln(4)
     
     pdf.set_font("helvetica", "B", 9)
-    pdf.set_fill_color(54, 95, 145) 
+    pdf.set_fill_color(74, 74, 74) # Encabezado de tabla Gris Corporativo VGM
     pdf.set_text_color(255, 255, 255)
     
     pdf.cell(24, 8, "CÓDIGO", border=1, align="C", fill=True)
@@ -240,7 +247,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.set_font("helvetica", "", 9)
     pdf.cell(120, 6, "2. Validez de cotización: 7 días", border=0)
     pdf.set_font("helvetica", "B", 10)
-    pdf.set_fill_color(233, 237, 244)
+    pdf.set_fill_color(255, 243, 224) # Relleno Naranja muy suave para el Total Final comercial
     pdf.cell(42, 6, "TOTAL", border=1, align="R")
     pdf.cell(28, 6, f"${total_bruto:,.0f}", border=1, align="R", fill=True)
     pdf.ln(8)
@@ -257,7 +264,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial (Sin Líneas de Cuadrícula, 1 Página de Ancho)
+# FUNCIÓN: Generación de Excel Comercial Oficial (Sin Líneas de Cuadrícula, Estilo VGM Gris/Naranja Sutil)
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -276,14 +283,14 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws.page_margins.header = 0
     ws.page_margins.footer = 0
     
-    font_titulo = Font(name="Arial", size=16, bold=True, color="1F497D")
+    font_titulo = Font(name="Arial", size=16, bold=True, color="4A4A4A") # Gris corporativo
     font_cabecera_tabla = Font(name="Arial", size=10, bold=True, color="FFFFFF")
     font_negrita = Font(name="Arial", size=10, bold=True)
     font_normal = Font(name="Arial", size=10)
     font_firma = Font(name="Arial", size=11, bold=True, italic=True)
     
-    fill_azul_header = PatternFill(start_color="365F91", end_color="365F91", fill_type="solid")
-    fill_totales = PatternFill(start_color="E9EDF4", end_color="E9EDF4", fill_type="solid")
+    fill_gris_header = PatternFill(start_color="4A4A4A", end_color="4A4A4A", fill_type="solid") # Tabla en gris corporativo
+    fill_totales_naranja_suave = PatternFill(start_color="FFE6CC", end_color="FFE6CC", fill_type="solid") # Resalte naranja corporativo sutil
     
     borde_delgado = Border(
         left=Side(style='thin', color='BFBFBF'), right=Side(style='thin', color='BFBFBF'),
@@ -330,7 +337,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     for col_idx, texto_col in enumerate(titulos_columnas, 1):
         celda = ws.cell(row=fila_tabla_inicio, column=col_idx, value=texto_col)
         celda.font = font_cabecera_tabla
-        celda.fill = fill_azul_header
+        celda.fill = fill_gris_header
         celda.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         celda.border = borde_delgado
     ws.row_dimensions[fila_tabla_inicio].height = 28
@@ -356,20 +363,10 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
-        if dict_imagenes and cod_limpio in dict_imagenes:
-            try:
-                img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio])
-                img_excel = OpenpyxlImage(img_prod_stream)
-                img_excel.width = 115
-                img_excel.height = 80
-                ws.add_image(img_excel, f"G{fila_actual}")
-            except:
-                pass
-        
         for c_idx in range(1, 8):
             ws.cell(row=fila_actual, column=c_idx).border = borde_delgado
             ws.cell(row=fila_actual, column=c_idx).font = font_normal
-        ws.row_dimensions[fila_actual].height = 65  
+        ws.row_dimensions[fila_actual].height = 24  
         fila_actual += 1
         
     ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
@@ -407,7 +404,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     celda_val_tot = ws.cell(row=fila_actual, column=6, value=total_bruto)
     celda_val_tot.font = font_negrita
-    celda_val_tot.fill = fill_totales
+    celda_val_tot.fill = fill_totales_naranja_suave
     celda_val_tot.number_format = '$#,##0'
     celda_val_tot.alignment = Alignment(horizontal="right", vertical="center")
     celda_val_tot.border = borde_delgado
@@ -651,7 +648,7 @@ if input_listo and api_key:
         except Exception as e:
             st.error(f"Error en procesamiento comercial: {e}")
 
-# RENDERIZADO ESTABLE DESDE MEMORIA (Previene borrados al interactuar en teléfonos móviles)
+# RENDERIZADO ESTABLE DESDE MEMORIA (Previene borrados al descargar en dispositivos móviles)
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
     st.dataframe(
@@ -673,7 +670,7 @@ if st.session_state['df_resultado'] is not None:
     
     dict_img = {}
     
-    # Inyección dinámica de variables al generar archivos para permitir edición fluida post-búsqueda
+    # Inyección dinámica de variables al generar archivos con los nuevos colores sutiles
     excel_bin = generar_excel_comercial(
         st.session_state['df_resultado'], nombre_cliente, empresa_cliente, numero_folio,
         st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'],
