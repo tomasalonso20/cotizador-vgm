@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Inteligente Premium V3)")
+st.title("Cotizador Express - VGM SpA 🚀 (Edición Omni-Canal Móvil)")
 
 # Lista de palabras vacías en español para limpiar búsquedas
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -38,7 +38,7 @@ def limpiar_plurales(texto):
             limpias.append(p)
     return " ".join(limpias)
 
-# LIMPIADOR DE PRECIOS: Formatea a números enteros limpios sin decimales molestos
+# LIMPIADOR DE PRECIOS: Formatea a números enteros limmios sin decimales molestos
 def limpiar_precio(valor):
     if pd.isna(valor):
         return 0.0
@@ -74,7 +74,7 @@ def leer_csv_tolerante(ruta_archivo):
                 for idx, line in enumerate(lineas):
                     line_low = line.lower()
                     coincidencias = sum(1 for kw in ['cod', 'desc', 'prec', 'mar', 'art', 'vta', 'neto', 'prod', 'clien'] if kw in line_low)
-                    if coincidencias >= 2:
+                    if modificaciones := coincidencias >= 2:
                         fila_cabecera_idx = idx
                         break
                 
@@ -125,7 +125,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         except:
             pass
             
-    # CAMBIO SOLICITADO: Título combinado y centrado en el encabezado (Columnas A a G)
+    # Título combinado y centrado en el encabezado (Columnas A a G)
     ws.merge_cells("A3:G3")
     celda_tit = ws["A3"]
     celda_tit.value = f"COTIZACIÓN N°{nro_cotiz}"
@@ -277,8 +277,8 @@ for ext in ["png", "jpg", "jpeg"]:
 # Barra lateral - Interfaz de Usuario
 with st.sidebar:
     st.subheader("💼 Datos de la Cotización")
-    nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej: Claudia Araya")
-    empresa_cliente = st.text_input("Empresa / Entidad:", placeholder="Ej: Transporte Santa Alberta")
+    nombre_cliente = st.text_input("Nombre del Cliente:", placeholder="Ej: José Mendoza")
+    empresa_cliente = st.text_input("Empresa / Entidad:", placeholder="Ej: Llantas del Pacífico")
     numero_folio = st.text_input("Número de Cotización:", value="EHP-TSA-2026")
     descuento_aplicar = st.number_input("Descuento a aplicar (%)", min_value=0, max_value=100, value=0, step=1)
     precio_manual_input = st.text_input("Precio Neto Fijo Alternativo (Opcional):", placeholder="Ej: 500000")
@@ -301,7 +301,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    # MOTOR DE SEGURIDAD: INTENTA LEER LA LLAVE AUTOMÁTICAMENTE DE STREAMLIT SECRETS
+    # MOTOR DE SEGURIDAD: LLAVE AUTOMÁTICA DESDE STREAMLIT SECRETS
     api_key = None
     if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"].strip():
         api_key = st.secrets["GEMINI_API_KEY"]
@@ -310,8 +310,21 @@ with st.sidebar:
         with st.expander("⚙️ Autenticación de Motor (Requerido)", expanded=True):
             api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
 
-st.subheader("1. Sube el pantallazo de la solicitud del cliente")
-imagen_pedido = st.file_uploader("Selecciona la imagen del pedido o correo", type=["png", "jpg", "jpeg"])
+st.subheader("1. Carga la Solicitud del Cliente (Elige el formato)")
+
+# NUEVO: Estructuración por pestañas para optimizar espacio móvil
+tab_imagen, tab_texto, tab_pdf = st.tabs(["📸 Pantallazo / Imagen", "✍️ Copiar-Pegar Texto", "📄 Archivo PDF"])
+
+imagen_pedido = None
+texto_pedido = ""
+pdf_pedido = None
+
+with tab_imagen:
+    imagen_pedido = st.file_uploader("Selecciona la imagen del pedido o correo", type=["png", "jpg", "jpeg"])
+with tab_texto:
+    texto_pedido = st.text_area("Pega aquí la lista de herramientas o texto enviado por el cliente:", placeholder="Ej: 2 llaves punta corona de 13mm\n1 juego de dados impacto...")
+with tab_pdf:
+    pdf_pedido = st.file_uploader("Sube el archivo PDF de la orden o presupuesto", type=["pdf"])
 
 # MOTOR DE CARGA: LECTURA DEL CATÁLOGO BASE VIGENTE
 df_catalogo = leer_csv_tolerante("lista_vigente.csv")
@@ -330,14 +343,59 @@ if df_historial is not None:
 else:
     st.warning("⚠️ Historial 'historial_ventas.csv' no detectado en el servidor. Operando en modo catálogo estándar.")
 
-# Procesamiento Inteligente
-if df_catalogo is not None and imagen_pedido and api_key:
+# Determinar si el usuario cargó algún input válido
+input_listo = False
+contenido_para_gemini = []
+
+# Base del prompt extractor con tus nuevas reglas comerciales incrustadas
+prompt_extraccion = """
+Analiza detalladamente esta solicitud de pedido (puede ser una imagen, un bloque de texto o un documento PDF). Extrae cada producto solicitado y su cantidad precisa.
+Además, para cada producto genera una lista de 4 a 6 sinónimos o términos técnicos comerciales en español que se usen comúnmente en los catálogos de herramientas industriales.
+
+CRÍTICO PARA LA EXPANSIÓN SEMÁNTICA:
+- Si detectas 'Pistola neumática' o similar, incluye obligatoriamente: 'llave impacto', 'neumatica', 'aire', 'cuadrante', '550', 'std'.
+- Si detectas 'Linterna imantada' o similar, incluye obligatoriamente: 'lampara trabajo', 'iman', 'led', 'funcional', 'cob'.
+- Si detectas 'Linterna led de cabeza', 'linterna de cabeza' o 'frontal', incluye obligatoriamente: 'l-head-1', 'l_head_1', 'cabeza', 'frontal', 'cintillo'. NO agregues el término 'imantada'.
+- Si detectas 'Punta corona' o 'llaves combinadas', especifica rigurosamente en los sinónimos que pertenecen a la familia ESTÁNDAR TRADICIONAL, SIN chicharra (no ratchet), e inyecta palabras clave de marca: 'yato', 'andes sam', 'andes-sam'.
+- Si detectas 'Dados torx' y menciona o se asocia a cuadrante de 1/2, busca explícitamente encastre '1/2' o 'cuadrante 1/2'.
+- Si detectas 'Dados de impacto', inyecta sinónimos asociados a líneas pesadas de impacto tipo 'yt1041', 'yt1039'.
+
+Devuelve el resultado ÚNICAMENTE en un formato JSON puro, sin textos introductorios, usando exactamente esta estructura:
+{
+    "productos": [
+        {
+            "busqueda": "Nombre original en el pedido", 
+            "cantidad": 1,
+            "sinonimos": ["termino1", "termino2", "termino3", "termino4"]
+        }
+    ]
+}
+No uses marcas de bloque markdown tipo ```json ni nada extra, solo entrega el texto del JSON directo.
+"""
+
+if imagen_pedido:
+    input_listo = True
+    img_abierta = Image.open(imagen_pedido)
+    contenido_para_gemini = [prompt_extraccion, img_abierta]
+elif texto_pedido.strip():
+    input_listo = True
+    contenido_para_gemini = [prompt_extraccion + "\n\nTEXTO ENVIADO POR EL CLIENTE:\n" + texto_pedido]
+elif pdf_pedido:
+    input_listo = True
+    pdf_bytes = pdf_pedido.read()
+    contenido_para_gemini = [
+        prompt_extraccion,
+        {"mime_type": "application/pdf", "data": pdf_bytes}
+    ]
+
+# Procesamiento Inteligente Multi-Canal
+if df_catalogo is not None and input_listo and api_key:
     if st.button("🔥 Generar Cotización Excel Inteligente"):
         try:
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            st.info("🔄 Fase 1: Leyendo imagen de solicitud e interpretando requerimientos...")
+            st.info("🔄 Fase 1: Leyendo y decodificando canal de solicitud...")
             df = df_catalogo.copy()
             df.columns = [str(c).strip() for c in df.columns]
             
@@ -357,34 +415,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
             df['__desc_clean'] = df[col_desc].apply(normalizar_texto)
             df['__cod_clean'] = df[col_codigo].apply(normalizar_texto)
             
-            imagen_lista = Image.open(imagen_pedido)
-            
-            prompt_extraccion = """
-            Analiza detalladamente esta imagen de pedido o correo de solicitud. Extrae cada producto solicitado y su cantidad.
-            Además, para cada producto genera una lista de 4 a 6 sinónimos o términos técnicos comerciales en español que se usen comúnmente en los catálogos de herramientas industriales.
-            
-            CRÍTICO PARA LA EXPANSIÓN SEMÁNTICA:
-            - Si detectas 'Pistola neumática' o similar, incluye obligatoriamente: 'llave impacto', 'neumatica', 'aire', 'cuadrante', '550', 'std'.
-            - Si detectas 'Linterna imantada' o similar, incluye obligatoriamente: 'lampara trabajo', 'iman', 'led', 'funcional', 'cob'.
-            - Si detectas 'Linterna led de cabeza', 'linterna de cabeza' o 'frontal', incluye obligatoriamente: 'l-head-1', 'l_head_1', 'cabeza', 'frontal', 'cintillo'. NO agregues el término 'imantada'.
-            - Si detectas 'Punta corona' o 'llaves combinadas', especifica rigurosamente en sinónimos que son de la familia ESTÁNDAR TRADICIONAL, SIN chicharra (no ratchet), e inyecta palabras clave de marca: 'yato', 'andes sam', 'andes-sam'.
-            - Si detectas 'Dados torx' y menciona o se asocia a cuadrante de 1/2, busca explícitamente encastre '1/2' o 'cuadrante 1/2'.
-            - Si detectas 'Dados de impacto', inyecta sinónimos asociados a líneas pesadas de impacto tipo 'yt1041', 'yt1039'.
-            
-            Devuelve el resultado ÚNICAMENTE en un formato JSON puro, sin textos introductorios, usando exactamente esta estructura:
-            {
-                "productos": [
-                    {
-                        "busqueda": "Nombre original en el pedido", 
-                        "cantidad": 1,
-                        "sinonimos": ["termino1", "termino2", "termino3", "termino4"]
-                    }
-                ]
-            }
-            No uses marcas de bloque markdown tipo ```json ni nada extra, solo entrega el texto del JSON directo.
-            """
-            
-            response = model.generate_content([prompt_extraccion, imagen_lista])
+            response = model.generate_content(contenido_para_gemini)
             texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
             
             datos_pedido = json.loads(texto_limpio)
@@ -428,7 +459,7 @@ if df_catalogo is not None and imagen_pedido and api_key:
             st.info("🔄 Fase 3: Resolviendo códigos y aplicando jerarquía de asignación...")
             
             prompt_resolucion = """
-            Actúas como un expert en repuestos y herramientas industriales para la empresa VGM SpA. 
+            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA. 
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
@@ -602,4 +633,4 @@ if df_catalogo is not None and imagen_pedido and api_key:
         except Exception as e:
             st.error(f"Error en el motor de automatización: {e}")
 else:
-    st.info("Por favor carga el pantallazo del pedido para operar.")
+    st.info("Por favor introduce una solicitud en cualquiera de las pestañas de arriba para comenzar.")
