@@ -15,7 +15,7 @@ from fpdf import FPDF
 
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
-st.title("Cotizador Express - VGM SpA 🚀 (Edición Omni-Canal Ultra-Veloz)")
+st.title("Cotizador Express - VGM SpA 🔧")
 
 # Inicializar estados de memoria para evitar que se borren los datos al hacer clic en descargas
 if 'df_resultado' not in st.session_state:
@@ -272,7 +272,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"
     ws["A7"].font = font_negrita
     
-    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
+    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra proposal:"
     ws["A8"].font = font_normal
     
     titulos_columnas = ["CODIGO", "MARCA", "DESCRIPCIÓN", "PRECIO UNITARIO NETO", "CANTIDAD", "PRECIO UNITARIO TOTAL", "IMAGEN REFERENCIAL"]
@@ -411,7 +411,6 @@ with st.sidebar:
     empresa_cliente = st.text_input("Empresa / Entidad:", placeholder="Ej: Llantas del Pacífico")
     numero_folio = st.text_input("Número de Cotización:", value="EHP-TSA-2026")
     
-    # AJUSTE ENRIQUE: Nuevos campos solicitados para condiciones dinámicas y equipo de oficina
     condicion_pago_input = st.text_input("Condición de Pago:", value="CONTADO", placeholder="Ej: CREDITO 30 Y 60 DIAS")
     vendedor_input = st.text_input("Vendedor:", value="Enrique Hernández P.", placeholder="Nombre de quien cotiza")
     
@@ -601,7 +600,7 @@ if input_listo and api_key:
                 st.session_state['empresa_cliente_s'] = empresa_cliente
                 st.session_state['numero_folio_s'] = numero_folio
                 st.session_state['condicion_pago_s'] = condicion_pago_input
-                st.session_state['vendedor_s'] = vendedor_input
+                st.session_state['vendedor_s'] = seller = vendedor_input
                 st.session_state['subtotal_lista'] = sum(x["Precio Lista (Neto)"] * x["Cantidad"] for x in cotizacion_final)
                 st.session_state['total_neto_final'] = sum(x["Total Neto"] for x in cotizacion_final)
                 st.session_state['descuento_total_pesos'] = max(st.session_state['subtotal_lista'] - st.session_state['total_neto_final'], 0.0)
