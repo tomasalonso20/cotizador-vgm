@@ -16,7 +16,7 @@ from fpdf import FPDF
 # Configuración de la página web
 st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
 
-# AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR
+# AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR (Movido al inicio para la cabecera web)
 logo_bytes = None
 for ext in ["png", "jpg", "jpeg"]:
     if os.path.exists(f"logo.{ext}"):
@@ -30,45 +30,38 @@ with col_titulo:
     st.title("Cotizador Express - VGM SpA 🔧")
 with col_logo:
     if logo_bytes:
+        # Muestra el logo institucional en un tamaño sutil y limpio en la esquina superior derecha
         st.image(io.BytesIO(logo_bytes), width=110)
 
-# INYECCIÓN DE PALETA CORPORATIVA VGM (Fondo Gris Suave Antirreflejo, Letras Grises, Naranja Sutil)
+# INYECCIÓN DE COLORES CORPORATIVOS EN LA INTERFAZ WEB
 st.markdown("""
     <style>
-    /* Forzar un fondo gris suave, limpio y ejecutivo para eliminar el contraste fuerte */
-    .stApp {
-        background-color: #F4F6F8 !important;
+    /* Color del azul corporativo principal para todos los títulos */
+    h1, h2, h3, h4, h5, h6 {
+        color: #1F497D !important;
     }
-    /* Títulos principales en Gris Corporativo Oscuro */
-    h1, h2 {
-        color: #3A3A3A !important;
-        font-family: 'Arial', sans-serif !important;
-    }
-    /* Subtítulos y etiquetas menores en Gris Medio */
-    h3, h4, h5, h6, label, .stMetric label {
-        color: #555555 !important;
-    }
-    /* Botón de acción principal en Naranja Institucional Sutil */
+    /* Estilo corporativo premium para el botón principal de Generar */
     div.stButton > button:first-child {
-        background-color: #E67E22 !important;
+        background-color: #365F91 !important;
         color: white !important;
         border: none !important;
         padding: 0.6rem 1.2rem !important;
         border-radius: 4px !important;
         font-weight: bold !important;
     }
-    /* Efecto Hover del botón principal */
+    /* Efecto de cambio de tono al pasar el cursor sobre el botón (Hover) */
     div.stButton > button:first-child:hover {
-        background-color: #D35400 !important;
+        background-color: #1F497D !important;
         color: white !important;
+        border: none !important;
     }
-    /* Pestañas de carga (Tabs) en armonía con la marca */
+    /* Estilo limpio para las pestañas de carga (Tabs) */
     button[data-baseweb="tab"] {
-        color: #666666 !important;
+        color: #555555 !important;
     }
     button[data-baseweb="tab"][aria-selected="true"] {
-        color: #E67E22 !important;
-        border-bottom-color: #E67E22 !important;
+        color: #1F497D !important;
+        border-bottom-color: #1F497D !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -157,7 +150,7 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN: Generación de PDF Comercial Oficial alineado a la identidad VGM
+# FUNCIÓN: Generación de PDF Comercial Oficial idéntico al Excel corporativo
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -173,7 +166,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.ln(6)
     
     pdf.set_font("helvetica", "B", 16)
-    pdf.set_text_color(74, 74, 74)
+    pdf.set_text_color(31, 73, 125)
     pdf.cell(0, 10, f"COTIZACIÓN N° {nro_cotiz}", ln=True, align="C")
     pdf.ln(4)
     
@@ -194,7 +187,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.ln(4)
     
     pdf.set_font("helvetica", "B", 9)
-    pdf.set_fill_color(74, 74, 74)
+    pdf.set_fill_color(54, 95, 145) 
     pdf.set_text_color(255, 255, 255)
     
     pdf.cell(24, 8, "CÓDIGO", border=1, align="C", fill=True)
@@ -247,7 +240,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.set_font("helvetica", "", 9)
     pdf.cell(120, 6, "2. Validez de cotización: 7 días", border=0)
     pdf.set_font("helvetica", "B", 10)
-    pdf.set_fill_color(255, 243, 224)
+    pdf.set_fill_color(233, 237, 244)
     pdf.cell(42, 6, "TOTAL", border=1, align="R")
     pdf.cell(28, 6, f"${total_bruto:,.0f}", border=1, align="R", fill=True)
     pdf.ln(8)
@@ -264,7 +257,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial (Sin Líneas de Cuadrícula, Estilo VGM Gris/Naranja Sutil)
+# FUNCIÓN: Generación de Excel Comercial Oficial (Sin Líneas de Cuadrícula, 1 Página de Ancho)
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -283,14 +276,14 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws.page_margins.header = 0
     ws.page_margins.footer = 0
     
-    font_titulo = Font(name="Arial", size=16, bold=True, color="4A4A4A")
+    font_titulo = Font(name="Arial", size=16, bold=True, color="1F497D")
     font_cabecera_tabla = Font(name="Arial", size=10, bold=True, color="FFFFFF")
     font_negrita = Font(name="Arial", size=10, bold=True)
     font_normal = Font(name="Arial", size=10)
     font_firma = Font(name="Arial", size=11, bold=True, italic=True)
     
-    fill_gris_header = PatternFill(start_color="4A4A4A", end_color="4A4A4A", fill_type="solid")
-    fill_totales_naranja_suave = PatternFill(start_color="FFE6CC", end_color="FFE6CC", fill_type="solid")
+    fill_azul_header = PatternFill(start_color="365F91", end_color="365F91", fill_type="solid")
+    fill_totales = PatternFill(start_color="E9EDF4", end_color="E9EDF4", fill_type="solid")
     
     borde_delgado = Border(
         left=Side(style='thin', color='BFBFBF'), right=Side(style='thin', color='BFBFBF'),
@@ -337,7 +330,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     for col_idx, texto_col in enumerate(titulos_columnas, 1):
         celda = ws.cell(row=fila_tabla_inicio, column=col_idx, value=texto_col)
         celda.font = font_cabecera_tabla
-        celda.fill = fill_gris_header
+        celda.fill = fill_azul_header
         celda.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         celda.border = borde_delgado
     ws.row_dimensions[fila_tabla_inicio].height = 28
@@ -345,6 +338,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
         cod_original = str(fila["Código"])
+        cod_limpio = cod_original.strip().lower()
         
         ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
@@ -362,10 +356,20 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
+        if dict_imagenes and cod_limpio in dict_imagenes:
+            try:
+                img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio])
+                img_excel = OpenpyxlImage(img_prod_stream)
+                img_excel.width = 115
+                img_excel.height = 80
+                ws.add_image(img_excel, f"G{fila_actual}")
+            except:
+                pass
+        
         for c_idx in range(1, 8):
             ws.cell(row=fila_actual, column=c_idx).border = borde_delgado
             ws.cell(row=fila_actual, column=c_idx).font = font_normal
-        ws.row_dimensions[fila_actual].height = 24  
+        ws.row_dimensions[fila_actual].height = 65  
         fila_actual += 1
         
     ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
@@ -403,7 +407,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     celda_val_tot = ws.cell(row=fila_actual, column=6, value=total_bruto)
     celda_val_tot.font = font_negrita
-    celda_val_tot.fill = fill_totales_naranja_suave
+    celda_val_tot.fill = fill_totales
     celda_val_tot.number_format = '$#,##0'
     celda_val_tot.alignment = Alignment(horizontal="right", vertical="center")
     celda_val_tot.border = borde_delgado
@@ -566,7 +570,7 @@ if input_listo and api_key:
             Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA.
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
-            ⚠️ REGLAS INQUEBRURABLES DE ASIGNACIÓN COMERCIAL:
+            ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
             1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
             2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
             3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
@@ -647,7 +651,7 @@ if input_listo and api_key:
         except Exception as e:
             st.error(f"Error en procesamiento comercial: {e}")
 
-# RENDERIZADO ESTABLE DESDE MEMORIA
+# RENDERIZADO ESTABLE DESDE MEMORIA (Previene borrados al interactuar en teléfonos móviles)
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
     st.dataframe(
@@ -669,6 +673,7 @@ if st.session_state['df_resultado'] is not None:
     
     dict_img = {}
     
+    # Inyección dinámica de variables al generar archivos para permitir edición fluida post-búsqueda
     excel_bin = generar_excel_comercial(
         st.session_state['df_resultado'], nombre_cliente, empresa_cliente, numero_folio,
         st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'],
