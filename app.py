@@ -116,7 +116,13 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN: Generación de PDF Comercial Oficial con el Azul original pulcro
+# FUNCIÓN AUXILIAR: Sanitiza strings para evitar roturas de formato por acentos en FPDF
+def clean_pdf_str(text):
+    if pd.isna(text):
+        return ""
+    return str(text).encode('latin-1', 'replace').decode('latin-1')
+
+# FUNCIÓN: Generación de PDF Comercial Oficial con Filtro Antisolapamiento de Acentos
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -128,40 +134,40 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
             pass
             
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(0, 5, f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}", ln=True, align="R")
+    pdf.cell(0, 5, clean_pdf_str(f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}"), ln=True, align="R")
     pdf.ln(6)
     
     pdf.set_font("helvetica", "B", 16)
     pdf.set_text_color(31, 73, 125)
-    pdf.cell(0, 10, f"COTIZACIÓN N° {nro_cotiz}", ln=True, align="C")
+    pdf.cell(0, 10, clean_pdf_str(f"COTIZACIÓN N° {nro_cotiz}"), ln=True, align="C")
     pdf.ln(4)
     
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(0, 5, "76.834.968-1", ln=True)
+    pdf.cell(0, 5, clean_pdf_str("76.834.968-1"), ln=True)
     pdf.set_font("helvetica", "", 10)
-    pdf.cell(0, 5, "Chopin 2848. San Joaquín. Santiago", ln=True)
+    pdf.cell(0, 5, clean_pdf_str("Chopin 2848. San Joaquín. Santiago"), ln=True)
     pdf.ln(3)
     
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(0, 5, f"Sr(a).: {cliente if cliente else 'No especificado'}", ln=True)
-    pdf.cell(0, 5, f"Empresa: {empresa if empresa else 'No especificada'}", ln=True)
+    pdf.cell(0, 5, clean_pdf_str(f"Sr(a).: {cliente if cliente else 'No especificado'}"), ln=True)
+    pdf.cell(0, 5, clean_pdf_str(f"Empresa: {empresa if empresa else 'No especificada'}"), ln=True)
     pdf.ln(3)
     
     pdf.set_font("helvetica", "", 10)
-    pdf.cell(0, 5, "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:", ln=True)
+    pdf.cell(0, 5, clean_pdf_str("En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"), ln=True)
     pdf.ln(4)
     
     pdf.set_font("helvetica", "B", 9)
     pdf.set_fill_color(54, 95, 145) 
     pdf.set_text_color(255, 255, 255)
     
-    pdf.cell(24, 8, "CÓDIGO", border=1, align="C", fill=True)
-    pdf.cell(24, 8, "MARCA", border=1, align="C", fill=True)
-    pdf.cell(72, 8, "DESCRIPCIÓN", border=1, align="C", fill=True)
-    pdf.cell(28, 8, "P. UNIT NETO", border=1, align="C", fill=True)
-    pdf.cell(14, 8, "CANT", border=1, align="C", fill=True)
-    pdf.cell(28, 8, "TOTAL NETO", border=1, align="C", fill=True)
+    pdf.cell(24, 8, clean_pdf_str("CÓDIGO"), border=1, align="C", fill=True)
+    pdf.cell(24, 8, clean_pdf_str("MARCA"), border=1, align="C", fill=True)
+    pdf.cell(72, 8, clean_pdf_str("DESCRIPCIÓN"), border=1, align="C", fill=True)
+    pdf.cell(28, 8, clean_pdf_str("P. UNIT NETO"), border=1, align="C", fill=True)
+    pdf.cell(14, 8, clean_pdf_str("CANT"), border=1, align="C", fill=True)
+    pdf.cell(28, 8, clean_pdf_str("TOTAL NETO"), border=1, align="C", fill=True)
     pdf.ln(8)
     
     pdf.set_text_color(0, 0, 0)
@@ -172,7 +178,6 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
         marca = str(fila["Marca"])
         desc = str(fila["Descripción Catálogo"]).replace("⚠️ (Match sugerido) ", "")
         
-        desc = desc.encode('latin-1', 'ignore').decode('latin-1')
         p_unit = f"${float(fila['Precio Final (Neto)']):,.0f}"
         cant = str(int(fila["Cantidad"]))
         total = f"${float(fila['Total Neto']):,.0f}"
@@ -180,50 +185,50 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
         if len(desc) > 42:
             desc = desc[:39] + "..."
             
-        pdf.cell(24, 7, cod, border=1, align="C")
-        pdf.cell(24, 7, marca, border=1, align="C")
-        pdf.cell(72, 7, desc, border=1, align="L")
-        pdf.cell(28, 7, p_unit, border=1, align="R")
-        pdf.cell(14, 7, cant, border=1, align="C")
-        pdf.cell(28, 7, total, border=1, align="R")
+        pdf.cell(24, 7, clean_pdf_str(cod), border=1, align="C")
+        pdf.cell(24, 7, clean_pdf_str(marca), border=1, align="C")
+        pdf.cell(72, 7, clean_pdf_str(desc), border=1, align="L")
+        pdf.cell(28, 7, clean_pdf_str(p_unit), border=1, align="R")
+        pdf.cell(14, 7, clean_pdf_str(cant), border=1, align="C")
+        pdf.cell(28, 7, clean_pdf_str(total), border=1, align="R")
         pdf.ln(7)
         
     pdf.ln(5)
     
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(120, 6, "Observaciones:", border=0)
-    pdf.cell(42, 6, "SUBTOTAL", border=1, align="R")
-    pdf.cell(28, 6, f"${total_neto:,.0f}", border=1, align="R")
+    pdf.cell(120, 6, clean_pdf_str("Observaciones:"), border=0)
+    pdf.cell(42, 6, clean_pdf_str("SUBTOTAL"), border=1, align="R")
+    pdf.cell(28, 6, clean_pdf_str(f"${total_neto:,.0f}"), border=1, align="R")
     pdf.ln(6)
     
     pdf.set_font("helvetica", "", 9)
-    pdf.cell(120, 6, "1: Plazo de entrega por confirmar", border=0)
+    pdf.cell(120, 6, clean_pdf_str("1: Plazo de entrega por confirmar"), border=0)
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(42, 6, "IVA", border=1, align="R")
-    pdf.cell(28, 6, f"${iva:,.0f}", border=1, align="R")
+    pdf.cell(42, 6, clean_pdf_str("IVA"), border=1, align="R")
+    pdf.cell(28, 6, clean_pdf_str(f"${iva:,.0f}"), border=1, align="R")
     pdf.ln(6)
     
     pdf.set_font("helvetica", "", 9)
-    pdf.cell(120, 6, "2. Validez de cotización: 7 días", border=0)
+    pdf.cell(120, 6, clean_pdf_str("2. Validez de cotización: 7 días"), border=0)
     pdf.set_font("helvetica", "B", 10)
     pdf.set_fill_color(233, 237, 244)
-    pdf.cell(42, 6, "TOTAL", border=1, align="R")
-    pdf.cell(28, 6, f"${total_bruto:,.0f}", border=1, align="R", fill=True)
+    pdf.cell(42, 6, clean_pdf_str("TOTAL"), border=1, align="R")
+    pdf.cell(28, 6, clean_pdf_str(f"${total_bruto:,.0f}"), border=1, align="R", fill=True)
     pdf.ln(8)
     
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(120, 5, f"Condiciones de Pago: {condicion_pago.upper()}", ln=0)
+    pdf.cell(120, 5, clean_pdf_str(f"Condiciones de Pago: {condicion_pago.upper()}"), ln=0)
     pdf.set_font("helvetica", "BI", 11)
-    pdf.cell(70, 5, f"{vendedor}", ln=1, align="R")
+    pdf.cell(70, 5, clean_pdf_str(f"{vendedor}"), ln=1, align="R")
     
     pdf.set_font("helvetica", "", 10)
-    pdf.cell(120, 5, "A la espera de sus comentarios, le saluda atentamente :", ln=0)
+    pdf.cell(120, 5, clean_pdf_str("A la espera de sus comentarios, le saluda atentamente :"), ln=0)
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(70, 5, "VGM SpA", ln=1, align="R")
+    pdf.cell(70, 5, clean_pdf_str("VGM SpA"), ln=1, align="R")
     
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial con el Azul original pulcro (Sin Líneas de Cuadrícula)
+# FUNCIÓN: Generación de Excel Comercial Oficial (Sin Líneas de Cuadrícula, Alturas Optimizadas)
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -287,6 +292,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"
     ws["A7"].font = font_negrita
     
+    # AJUSTE ENRIQUE: Corregido error de traducción literal "proposal" por "propuesta"
     ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
     ws["A8"].font = font_normal
     
@@ -304,6 +310,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
         cod_original = str(fila["Código"])
+        cod_limpio = cod_original.strip().lower()
         
         ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
@@ -321,10 +328,23 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
+        # AJUSTE ENRIQUE: Fila dinámica compacta (22) si no existen imágenes cargadas.
+        if dict_imagenes and cod_limpio in dict_imagenes:
+            try:
+                img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio])
+                img_excel = OpenpyxlImage(img_prod_stream)
+                img_excel.width = 115
+                img_excel.height = 80
+                ws.add_image(img_excel, f"G{fila_actual}")
+                ws.row_dimensions[fila_actual].height = 65
+            except:
+                ws.row_dimensions[fila_actual].height = 22
+        else:
+            ws.row_dimensions[fila_actual].height = 22
+        
         for c_idx in range(1, 8):
             ws.cell(row=fila_actual, column=c_idx).border = borde_delgado
             ws.cell(row=fila_actual, column=c_idx).font = font_normal
-        ws.row_dimensions[fila_actual].height = 24  
         fila_actual += 1
         
     ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
@@ -522,14 +542,14 @@ if input_listo and api_key:
                 candidates_rag[termino] = cand_list
 
             prompt_resolucion = """
-            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA.
+            Actúas como un expert en repuestos y herramientas industriales para la empresa VGM SpA.
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
             1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
             2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
             3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
-            4. LLAVES DE IMPACTO INALÁI_BRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
+            4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
             5. PUNTA CORONA / LLAVES COMBINADAS: Deben ser estrictamente de la familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Queda terminantemente prohibido elegir llaves con chicharra a menos que se solicite explícitamente de forma textual. Dar obligatoriamente como primera opción la marca 'YATO', y como segunda opción 'ANDES-SAM'.
             6. DADOS TORX DE CUADRANTE 1/2: Filtrar y priorizar exclusivamente los códigos de dados Torx con encastre o cuadrante de 1/2" del catálogo.
             7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos clave: YT1041, YT1039 u homólogos de impacto).
@@ -539,7 +559,7 @@ if input_listo and api_key:
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             """ + json.dumps(candidates_rag, ensure_ascii=False, indent=2) + """
             
-            Devuelve ÚNICAMENTE un JSON estructurado de la siguiente forma, sin bloques markdown ni texto adicional:
+            Devuelve ÚNICAMENTE un JSON structured de la siguiente forma, sin bloques markdown ni texto adicional:
             {
                 "resultados": [
                     {
