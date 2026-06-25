@@ -83,7 +83,7 @@ def leer_csv_tolerante(ruta_archivo):
     encodings_a_probar = ['utf-8', 'latin1', 'iso-8859-1', 'utf-8-sig', 'cp1252']
     delimitadores_a_probar = [';', ',']
     for enc in encodings_a_probar:
-        for sep in delimiters_a_probar:
+        for sep in delimitadores_a_probar:
             try:
                 with open(ruta_archivo, 'r', encoding=enc) as f:
                     lineas = [f.readline() for _ in range(15)]
@@ -630,7 +630,7 @@ if st.session_state['df_resultado'] is not None:
     excel_bin = generar_excel_comercial(
         df_editable, nombre_cliente, empresa_cliente, numero_folio,
         total_neto_final_v, iva_calculado_v, total_bruto_v,
-        logo_bytes, dict_img, condicion_pago_input, seller_input=vendedor_input
+        logo_bytes, dict_img, condicion_pago_input, vendedor_input
     )
     pdf_raw = generar_pdf_comercial(
         df_editable, nombre_cliente, empresa_cliente, numero_folio,
