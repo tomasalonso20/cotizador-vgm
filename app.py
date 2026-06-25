@@ -582,7 +582,8 @@ if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Editable en Pantalla)")
     st.caption("💡 Truco Comercial: Si algún producto de un link viene con costo $0, puedes hacer doble clic en la celda 'Precio Lista (Neto)', digitar el valor real, presionar Enter y los cálculos se actualizarán al instante.")
     
-    # LA SOLUCIÓN NATIVA: Se eliminan parámetros erróneos y se bloquean las columnas de salida desde el parámetro 'disabled' nativo de Streamlit
+    # SOLUCIÓN DE BLINDAJE: Quitamos "Precio Final (Neto)" y "Total Neto" de la lista global de 'disabled'.
+    # Su formato se mantiene perfecto y las modificaciones manuales accidentales se sobreescriben automáticamente por código.
     df_editable = st.data_editor(
         st.session_state['df_resultado'],
         column_config={
@@ -591,7 +592,7 @@ if st.session_state['df_resultado'] is not None:
             "Total Neto": st.column_config.NumberColumn("Total Neto ($)", format="$%,.0f"),
             "Cantidad": st.column_config.NumberColumn("Cant", min_value=1)
         },
-        disabled=["Código", "Marca", "Descripción Catálogo", "Descuento Aplicado", "Precio Final (Neto)", "Total Neto"],
+        disabled=["Código", "Marca", "Descripción Catálogo", "Descuento Aplicado"],
         use_container_width=True
     ).copy()
     
