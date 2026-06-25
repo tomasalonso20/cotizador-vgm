@@ -7,10 +7,6 @@ import unicodedata
 import io
 import os
 
-# Importaciones para extracción avanzada de enlaces web (Caso Bahco)
-import requests
-from bs4 import BeautifulSoup
-
 # Importaciones nativas para diseño avanzado de Excel y PDF
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -87,7 +83,7 @@ def leer_csv_tolerante(ruta_archivo):
     encodings_a_probar = ['utf-8', 'latin1', 'iso-8859-1', 'utf-8-sig', 'cp1252']
     delimitadores_a_probar = [';', ',']
     for enc in encodings_a_probar:
-        for sep in delimitadores_a_probar:
+        for sep in delimiters_a_probar:
             try:
                 with open(ruta_archivo, 'r', encoding=enc) as f:
                     lineas = [f.readline() for _ in range(15)]
@@ -130,9 +126,11 @@ def leer_equivalencias(ruta_archivo="equivalencias.csv"):
                 continue
     return {}
 
-# RASPADOR NATIVO DE TEXTO WEB: Extrae el contenido limpio de URLs oficiales (Caso Bahco)
+# RASPADOR PROTEGIDO CON IMPORTACIONES INTERNAS (Evita caídas por ModuleNotFoundError)
 def extraer_texto_de_url(url):
     try:
+        import requests
+        from bs4 import BeautifulSoup
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
@@ -271,7 +269,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A5"] = "Chopin 2848. San Joaquín. Santiago"; ws["A5"].font = font_normal
     ws["A6"] = f"Sr(a).: {cliente if cliente else 'No especificado'}"; ws["A6"].font = font_negrita
     ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"; ws["A7"].font = font_negrita
-    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra proposal:"; ws["A8"].font = font_normal
+    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"; ws["A8"].font = font_normal
     
     titulos_columnas = ["CODIGO", "MARCA", "DESCRIPCIÓN", "PRECIO UNITARIO NETO", "CANTIDAD", "PRECIO UNITARIO TOTAL", "IMAGEN REFERENCIAL"]
     fila_tabla_inicio = 10
@@ -527,7 +525,7 @@ if input_listo and api_key:
                         "Precio_Final": px_final_neto, "Total_Neto": px_final_neto * cant
                     })
 
-            # --- RUTA DE EJECUCIÓN B: COSTO PROVEEDOR + MARGEN (¡LLAVES UNIFICADAS CORRECTAMENTE!) ---
+            # --- RUTA DE EJECUCIÓN B: COSTO PROVEEDOR + MARGEN ---
             else:
                 st.info("🔄 Analizando capturas y extrayendo fichas técnicas web...")
                 items_extraidos = []
@@ -581,7 +579,7 @@ if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Editable en Pantalla)")
     st.caption("💡 Truco Comercial: Si algún producto de un link viene con costo $0, puedes hacer doble clic en la celda 'Costo Base / Lista ($)', digitar el valor real, presionar Enter y los cálculos se actualizarán al instante.")
     
-    # LA SOLUCIÓN DEFINITIVA: Las columnas internas son 100% simétricas tanto para Modo A como Modo B.
+    # Las columnas internas usan llaves ASCII limpias (sin tildes ni espacios). 
     # El bloqueo 'disabled' apunta de forma segura a estas llaves estables. El usuario ve los títulos perfectos.
     df_editable = st.data_editor(
         st.session_state['df_resultado'],
@@ -632,7 +630,7 @@ if st.session_state['df_resultado'] is not None:
     excel_bin = generar_excel_comercial(
         df_editable, nombre_cliente, empresa_cliente, numero_folio,
         total_neto_final_v, iva_calculado_v, total_bruto_v,
-        logo_bytes, dict_img, condicion_pago_input, vendedor_input
+        logo_bytes, dict_img, condicion_pago_input, seller_input=vendedor_input
     )
     pdf_raw = generar_pdf_comercial(
         df_editable, nombre_cliente, empresa_cliente, numero_folio,
