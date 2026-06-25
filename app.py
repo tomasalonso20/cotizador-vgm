@@ -36,6 +36,8 @@ if 'df_resultado' not in st.session_state:
     st.session_state['numero_folio_s'] = ""
     st.session_state['condicion_pago_s'] = "CONTADO"
     st.session_state['vendedor_s'] = "Enrique Hernández P."
+if 'dict_imagenes_session' not in st.session_state:
+    st.session_state['dict_imagenes_session'] = {}
 
 # Lista de palabras vacías en español para limpiar búsquedas del catálogo
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
@@ -149,8 +151,8 @@ def clean_pdf_str(text):
         return ""
     return str(text).encode('latin-1', 'replace').decode('latin-1')
 
-# FUNCIÓN: Generación de PDF Comercial Oficial (Con llaves unificadas)
-def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
+# FUNCIÓN: Generación de PDF Comercial Premium (Sin puntos suspensivos + Imágenes de producto)
+def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
     if logo_bytes:
@@ -176,52 +178,87 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.set_font("helvetica", "", 10)
     pdf.cell(0, 5, clean_pdf_str("En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"), ln=True)
     pdf.ln(4)
+    
+    # Diseño métrico de cabecera de tabla optimizado para 190mm totales
     pdf.set_font("helvetica", "B", 9)
     pdf.set_fill_color(54, 95, 145)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(24, 8, clean_pdf_str("CÓDIGO"), border=1, align="C", fill=True)
-    pdf.cell(24, 8, clean_pdf_str("MARCA"), border=1, align="C", fill=True)
-    pdf.cell(72, 8, clean_pdf_str("DESCRIPCIÓN"), border=1, align="C", fill=True)
-    pdf.cell(28, 8, clean_pdf_str("P. UNIT NETO"), border=1, align="C", fill=True)
-    pdf.cell(14, 8, clean_pdf_str("CANT"), border=1, align="C", fill=True)
-    pdf.cell(28, 8, clean_pdf_str("TOTAL NETO"), border=1, align="C", fill=True)
+    pdf.cell(22, 8, clean_pdf_str("CÓDIGO"), border=1, align="C", fill=True)
+    pdf.cell(20, 8, clean_pdf_str("MARCA"), border=1, align="C", fill=True)
+    pdf.cell(68, 8, clean_pdf_str("DESCRIPCIÓN"), border=1, align="C", fill=True)
+    pdf.cell(24, 8, clean_pdf_str("P. UNIT NETO"), border=1, align="C", fill=True)
+    pdf.cell(12, 8, clean_pdf_str("CANT"), border=1, align="C", fill=True)
+    pdf.cell(24, 8, clean_pdf_str("TOTAL NETO"), border=1, align="C", fill=True)
+    pdf.cell(20, 8, clean_pdf_str("IMAGEN"), border=1, align="C", fill=True)
     pdf.ln(8)
+    
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("helvetica", "", 9)
+    
     for _, fila in df_cotiz.iterrows():
         cod = str(fila["Codigo"])
+        cod_limpio = cod.strip().lower()
         marca = str(fila["Marca"])
         desc = str(fila["Descripcion"]).replace("⚠️ (Match sugerido) ", "")
         p_unit = f"${float(fila['Precio_Final']):,.0f}"
         cant = str(int(fila["Cantidad"]))
         total = f"${float(fila['Total_Neto']):,.0f}"
-        if len(desc) > 42: desc = desc[:39] + "..."
-        pdf.cell(24, 7, clean_pdf_str(cod), border=1, align="C")
-        pdf.cell(24, 7, clean_pdf_str(marca), border=1, align="C")
-        pdf.cell(72, 7, clean_pdf_str(desc), border=1, align="L")
-        pdf.cell(28, 7, clean_pdf_str(p_unit), border=1, align="R")
-        pdf.cell(14, 7, clean_pdf_str(cant), border=1, align="C")
-        pdf.cell(28, 7, clean_pdf_str(total), border=1, align="R")
-        pdf.ln(7)
+        
+        # CALCULADOR MAESTRO DE ALTURA DINÁMICA (Multi-línea sin puntos suspensivos)
+        caracteres_por_linea = 38
+        lineas_estimadas = max(1, -(-len(desc) // caracteres_por_linea))
+        alto_fila = max(lineas_estimadas * 5, 16) # Mínimo 16mm para que calce holgada la foto
+        
+        current_y = pdf.get_y()
+        
+        # Celdas base de la fila
+        pdf.cell(22, alto_fila, clean_pdf_str(cod), border=1, align="C")
+        pdf.cell(20, alto_fila, clean_pdf_str(marca), border=1, align="C")
+        
+        # Inyección de descripción multi-línea integrada
+        pos_desc_x = pdf.get_x()
+        pdf.cell(68, alto_fila, "", border=1) # Dibuja la celda estructural externa
+        pdf.set_xy(pos_desc_x, current_y + 1)
+        pdf.multi_cell(68, 4, clean_pdf_str(desc), border=0, align="L")
+        pdf.set_xy(pos_desc_x + 68, current_y)
+        
+        pdf.cell(24, alto_fila, clean_pdf_str(p_unit), border=1, align="R")
+        pdf.cell(12, alto_fila, clean_pdf_str(cant), border=1, align="C")
+        pdf.cell(24, alto_fila, clean_pdf_str(total), border=1, align="R")
+        
+        # Inyección y centrado de la imagen referencial del producto
+        pos_img_x = pdf.get_x()
+        pdf.cell(20, alto_fila, "", border=1, align="C")
+        if dict_imagenes and cod_limpio in dict_imagenes:
+            try:
+                img_data = dict_imagenes[cod_limpio]
+                offset_x = pos_img_x + 3  # Centrado horizontal
+                offset_y = current_y + (alto_fila - 14) / 2 # Centrado vertical
+                pdf.image(io.BytesIO(img_data), x=offset_x, y=offset_y, w=14, h=14)
+            except: pass
+            
+        pdf.ln(alto_fila)
+        
     pdf.ln(5)
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(120, 6, clean_pdf_str("Observaciones:"), border=0)
-    pdf.cell(42, 6, clean_pdf_str("SUBTOTAL"), border=1, align="R")
-    pdf.cell(28, 6, clean_pdf_str(f"${total_neto:,.0f}"), border=1, align="R")
+    # Cuadro de totales perfectamente alineado con las columnas derechas
+    pdf.cell(146, 6, clean_pdf_str("Observaciones:"), border=0)
+    pdf.cell(24, 6, clean_pdf_str("SUBTOTAL"), border=1, align="R")
+    pdf.cell(20, 6, clean_pdf_str(f"${total_neto:,.0f}"), border=1, align="R")
     pdf.ln(6)
     pdf.set_font("helvetica", "", 9)
-    pdf.cell(120, 6, clean_pdf_str("1: Plazo de entrega por confirmar"), border=0)
+    pdf.cell(146, 6, clean_pdf_str("1: Plazo de entrega por confirmar"), border=0)
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(42, 6, clean_pdf_str("IVA"), border=1, align="R")
-    pdf.cell(28, 6, clean_pdf_str(f"${iva:,.0f}"), border=1, align="R")
+    pdf.cell(24, 6, clean_pdf_str("IVA"), border=1, align="R")
+    pdf.cell(20, 6, clean_pdf_str(f"${iva:,.0f}"), border=1, align="R")
     pdf.ln(6)
-    pdf.set_font("helvetica", "", 9)
-    pdf.cell(120, 6, clean_pdf_str("2. Validez de cotización: 7 días"), border=0)
+    pdf.cell(146, 6, clean_pdf_str("2. Validez de cotización: 7 días"), border=0)
     pdf.set_font("helvetica", "B", 10)
     pdf.set_fill_color(233, 237, 244)
-    pdf.cell(42, 6, clean_pdf_str("TOTAL"), border=1, align="R")
-    pdf.cell(28, 6, clean_pdf_str(f"${total_bruto:,.0f}"), border=1, align="R", fill=True)
+    pdf.cell(24, 6, clean_pdf_str("TOTAL"), border=1, align="R")
+    pdf.cell(20, 6, clean_pdf_str(f"${total_bruto:,.0f}"), border=1, align="R", fill=True)
     pdf.ln(8)
+    
     pdf.set_font("helvetica", "B", 10)
     pdf.cell(120, 5, clean_pdf_str(f"Condiciones de Pago: {condicion_pago.upper()}"), ln=0)
     pdf.set_font("helvetica", "BI", 11)
@@ -232,7 +269,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.cell(70, 5, clean_pdf_str("VGM SpA"), ln=1, align="R")
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial (Con llaves unificadas)
+# FUNCIÓN: Generación de Excel Comercial Oficial
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -532,10 +569,17 @@ if input_listo and api_key:
                 
                 if imagenes_prov:
                     for img_file in imagenes_prov:
-                        response_img = model.generate_content([prompt_proveedor, Image.open(img_file)])
+                        img_bytes = img_file.read()
+                        response_img = model.generate_content([prompt_proveedor, Image.open(io.BytesIO(img_bytes))])
                         try:
                             json_data = json.loads(response_img.text.strip().replace("```json", "").replace("```", ""))
-                            items_extraidos.extend(json_data.get("productos", []))
+                            items_prov_list = json_data.get("productos", [])
+                            items_extraidos.extend(items_prov_list)
+                            
+                            # ARQUITECTURA DE ASOCIACIÓN VISUAL AUTOMÁTICA
+                            for item_p in items_prov_list:
+                                c_clean = str(item_p.get("codigo", "MANUAL")).strip().lower()
+                                st.session_state['dict_imagenes_session'][c_clean] = img_bytes
                         except: pass
                         
                 if links_texto.strip():
@@ -579,8 +623,6 @@ if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Editable en Pantalla)")
     st.caption("💡 Truco Comercial: Si algún producto de un link viene con costo $0, puedes hacer doble clic en la celda 'Costo Base / Lista ($)', digitar el valor real, presionar Enter y los cálculos se actualizarán al instante.")
     
-    # Las columnas internas usan llaves ASCII limpias (sin tildes ni espacios). 
-    # El bloqueo 'disabled' apunta de forma segura a estas llaves estables. El usuario ve los títulos perfectos.
     df_editable = st.data_editor(
         st.session_state['df_resultado'],
         column_config={
@@ -625,8 +667,9 @@ if st.session_state['df_resultado'] is not None:
     
     st.markdown("---")
     
-    # Generación de archivos binarios finales
-    dict_img = {}
+    # Rescate de imágenes asociadas desde memoria para empaquetado final
+    dict_img = st.session_state.get('dict_imagenes_session', {})
+    
     excel_bin = generar_excel_comercial(
         df_editable, nombre_cliente, empresa_cliente, numero_folio,
         total_neto_final_v, iva_calculado_v, total_bruto_v,
@@ -635,7 +678,7 @@ if st.session_state['df_resultado'] is not None:
     pdf_raw = generar_pdf_comercial(
         df_editable, nombre_cliente, empresa_cliente, numero_folio,
         total_neto_final_v, iva_calculado_v, total_bruto_v,
-        logo_bytes, condicion_pago_input, vendedor_input
+        logo_bytes, dict_img, condicion_pago_input, vendedor_input
     )
     pdf_bin = pdf_raw.encode('latin-1') if isinstance(pdf_raw, str) else bytes(pdf_raw)
     
