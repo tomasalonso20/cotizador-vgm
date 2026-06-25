@@ -17,7 +17,6 @@ from fpdf import FPDF
 st.set_page_config(page_title="Cotizador IA EHP", layout="wide")
 
 # AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR
-# Se conserva en memoria EXCLUSIVAMENTE para inyectarlo en los entregables PDF y Excel del cliente
 logo_bytes = None
 for ext in ["png", "jpg", "jpeg"]:
     if os.path.exists(f"logo.{ext}"):
@@ -111,7 +110,7 @@ def leer_equivalencias(ruta_archivo="equivalencias.csv"):
     encodings = ['utf-8', 'latin1', 'iso-8859-1', 'utf-8-sig', 'cp1252']
     delimitadores = [';', ',']
     for enc in encodings:
-        for sep in delimitadores:
+        for sep in delimiters:
             try:
                 df_eq = pd.read_csv(ruta_archivo, sep=sep, encoding=enc)
                 df_eq.columns = [str(c).strip().lower() for c in df_eq.columns]
@@ -128,7 +127,6 @@ def leer_equivalencias(ruta_archivo="equivalencias.csv"):
                 continue
     return {}
 
-# RASPADOR PROTEGIDO CON IMPORTACIONES INTERNAS (Evita caídas por ModuleNotFoundError)
 def extraer_texto_de_url(url):
     try:
         import requests
@@ -151,7 +149,7 @@ def clean_pdf_str(text):
         return ""
     return str(text).encode('latin-1', 'replace').decode('latin-1')
 
-# FUNCIÓN: Generación de PDF Comercial Premium (Sin puntos suspensivos + Imágenes de producto)
+# FUNCIÓN: Generación de PDF Comercial Premium (Con Centrado Absoluto e Inyección de Imágenes Recortadas)
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -179,7 +177,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.cell(0, 5, clean_pdf_str("En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"), ln=True)
     pdf.ln(4)
     
-    # Diseño métrico de cabecera de tabla optimizado para 190mm totales
+    # Ancho total disponible: 190mm (Perfectamente distribuido con columna IMAGEN)
     pdf.set_font("helvetica", "B", 9)
     pdf.set_fill_color(54, 95, 145)
     pdf.set_text_color(255, 255, 255)
@@ -204,44 +202,46 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
         cant = str(int(fila["Cantidad"]))
         total = f"${float(fila['Total_Neto']):,.0f}"
         
-        # CALCULADOR MAESTRO DE ALTURA DINÁMICA (Multi-línea sin puntos suspensivos)
-        caracteres_por_linea = 38
+        # CALCULADOR MAESTRO DE ALTURA Y TEXTO MULTILÍNEA CENTRADO
+        caracteres_por_linea = 34
         lineas_estimadas = max(1, -(-len(desc) // caracteres_por_linea))
-        alto_fila = max(lineas_estimadas * 5, 16) # Mínimo 16mm para que calce holgada la foto
+        alto_fila = max(lineas_estimadas * 4 + 6, 22) # 22mm de base para que luzca holgada la foto
         
         current_y = pdf.get_y()
         
-        # Celdas base de la fila
+        # Renderizado de celdas estándar (Auto-centradas verticalmente por FPDF)
         pdf.cell(22, alto_fila, clean_pdf_str(cod), border=1, align="C")
         pdf.cell(20, alto_fila, clean_pdf_str(marca), border=1, align="C")
         
-        # Inyección de descripción multi-línea integrada
+        # CENTRADO ABSOLUTO (HORIZONTAL Y VERTICAL) DE LA CELDA DESCRIPCIÓN
         pos_desc_x = pdf.get_x()
-        pdf.cell(68, alto_fila, "", border=1) # Dibuja la celda estructural externa
-        pdf.set_xy(pos_desc_x, current_y + 1)
-        pdf.multi_cell(68, 4, clean_pdf_str(desc), border=0, align="L")
-        pdf.set_xy(pos_desc_x + 68, current_y)
+        pdf.cell(68, alto_fila, "", border=1) # Dibuja el marco estructural de la celda
+        alto_bloque_texto = lineas_estimadas * 4
+        y_centrado_perfecto = current_y + (alto_fila - alto_bloque_texto) / 2
+        
+        pdf.set_xy(pos_desc_x, y_centrado_perfecto)
+        pdf.multi_cell(68, 4, clean_pdf_str(desc), border=0, align="C") # align="C" Centra horizontalmente
+        pdf.set_xy(pos_desc_x + 68, current_y) # Restaura el cursor al borde derecho de la celda
         
         pdf.cell(24, alto_fila, clean_pdf_str(p_unit), border=1, align="R")
         pdf.cell(12, alto_fila, clean_pdf_str(cant), border=1, align="C")
         pdf.cell(24, alto_fila, clean_pdf_str(total), border=1, align="R")
         
-        # Inyección y centrado de la imagen referencial del producto
+        # CENTRADO E INYECCIÓN DE LA FOTO RECORTADA DEL PRODUCTO
         pos_img_x = pdf.get_x()
         pdf.cell(20, alto_fila, "", border=1, align="C")
         if dict_imagenes and cod_limpio in dict_imagenes:
             try:
                 img_data = dict_imagenes[cod_limpio]
-                offset_x = pos_img_x + 3  # Centrado horizontal
-                offset_y = current_y + (alto_fila - 14) / 2 # Centrado vertical
-                pdf.image(io.BytesIO(img_data), x=offset_x, y=offset_y, w=14, h=14)
+                offset_x = pos_img_x + (20 - 16) / 2  # Centrado horizontal exacto
+                offset_y = current_y + (alto_fila - 16) / 2 # Centrado vertical exacto
+                pdf.image(io.BytesIO(img_data), x=offset_x, y=offset_y, w=16, h=16)
             except: pass
             
         pdf.ln(alto_fila)
         
     pdf.ln(5)
     pdf.set_font("helvetica", "B", 10)
-    # Cuadro de totales perfectamente alineado con las columnas derechas
     pdf.cell(146, 6, clean_pdf_str("Observaciones:"), border=0)
     pdf.cell(24, 6, clean_pdf_str("SUBTOTAL"), border=1, align="R")
     pdf.cell(20, 6, clean_pdf_str(f"${total_neto:,.0f}"), border=1, align="R")
@@ -269,7 +269,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.cell(70, 5, clean_pdf_str("VGM SpA"), ln=1, align="R")
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial
+# FUNCIÓN: Generación de Excel Comercial Oficial (Con soporte de Imagen Acoplada)
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -288,9 +288,11 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     fill_azul_header = PatternFill(start_color="365F91", end_color="365F91", fill_type="solid")
     fill_totales = PatternFill(start_color="E9EDF4", end_color="E9EDF4", fill_type="solid")
     borde_delgado = Border(left=Side(style='thin', color='BFBFBF'), right=Side(style='thin', color='BFBFBF'), top=Side(style='thin', color='BFBFBF'), bottom=Side(style='thin', color='BFBFBF'))
+    
     ws["G1"] = f"Fecha: {pd.Timestamp.now().strftime('%d-%m-%Y')}"
     ws["G1"].font = font_negrita
     ws["G1"].alignment = Alignment(horizontal="right")
+    
     if logo_bytes:
         try:
             img_stream = io.BytesIO(logo_bytes)
@@ -298,10 +300,12 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
             img.width = 130; img.height = 50
             ws.add_image(img, 'A1')
         except: pass
+        
     ws.merge_cells("A3:G3")
     celda_tit = ws["A3"]; celda_tit.value = f"COTIZACIÓN N°{nro_cotiz}"; celda_tit.font = font_titulo
     celda_tit.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[3].height = 32
+    
     ws["A4"] = "76.834.968-1"; ws["A4"].font = font_negrita
     ws["A5"] = "Chopin 2848. San Joaquín. Santiago"; ws["A5"].font = font_normal
     ws["A6"] = f"Sr(a).: {cliente if cliente else 'No especificado'}"; ws["A6"].font = font_negrita
@@ -323,10 +327,12 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
         desc_excel = str(fila["Descripcion"]).replace("⚠️ (Match sugerido) ", "")
-        ws.cell(row=fila_actual, column=3, value=desc_excel).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        ws.cell(row=fila_actual, column=3, value=desc_excel).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        
         c_neto = ws.cell(row=fila_actual, column=4, value=float(fila["Precio_Final"]))
         c_neto.number_format = '$#,##0'; c_neto.alignment = Alignment(horizontal="right", vertical="center")
         ws.cell(row=fila_actual, column=5, value=int(fila["Cantidad"])).alignment = Alignment(horizontal="center", vertical="center")
+        
         c_total = ws.cell(row=fila_actual, column=6, value=float(fila["Total_Neto"]))
         c_total.number_format = '$#,##0'; c_total.alignment = Alignment(horizontal="right", vertical="center")
         
@@ -334,11 +340,12 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
             try:
                 img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio])
                 img_excel = OpenpyxlImage(img_prod_stream)
-                img_excel.width = 115; img_excel.height = 80
+                img_excel.width = 110; img_excel.height = 80
                 ws.add_image(img_excel, f"G{fila_actual}")
-                ws.row_dimensions[fila_actual].height = 65
-            except: ws.row_dimensions[fila_actual].height = 22
-        else: ws.row_dimensions[fila_actual].height = 22
+                ws.row_dimensions[fila_actual].height = 68
+            except: ws.row_dimensions[fila_actual].height = 24
+        else: ws.row_dimensions[fila_actual].height = 24
+            
         for c_idx in range(1, 8):
             ws.cell(row=fila_actual, column=c_idx).border = borde_delgado; ws.cell(row=fila_actual, column=c_idx).font = font_normal
         fila_actual += 1
@@ -417,8 +424,11 @@ if modo_operacion == "Catálogo Interno (Precio Lista)":
         
     input_listo = False
     contenido_para_gemini = []
+    
+    # REGLA ANTIMEZCLA: Obliga a separar productos en la extracción inicial
     prompt_extraccion = """
-    Analiza detalladamente esta solicitud de pedido (puede ser imagen, texto o PDF). Extrae cada producto solicitado y su cantidad precisa. Genera de 4 a 6 sinónimos o términos técnicos para ampliar la búsqueda.
+    Analiza detalladamente esta solicitud de pedido (puede ser imagen, texto o PDF). Extrae cada producto solicitado y su cantidad precisa de forma INDIVIDUAL.
+    Cada herramienta o artículo debe ser un elemento independiente en la lista 'productos'. NO mezcles ni concatenes productos distintos en una sola línea o campo.
     Devuelve ÚNICAMENTE un JSON puro con esta estructura, sin bloques markdown:
     {
         "productos": [
@@ -437,7 +447,6 @@ if modo_operacion == "Catálogo Interno (Precio Lista)":
         contenido_para_gemini = [prompt_extraccion, {"mime_type": "application/pdf", "data": pdf_pedido.read()}]
 
 else:
-    # MODO: Costo Proveedor + Margen
     st.subheader("1. Carga los Pantallazos o Links del Proveedor (Camino B)")
     tab_imagenes_prov, tab_links_prov = st.tabs(["📸 Múltiples Pantallazos / Capturas", "🔗 Enlaces / Fichas de Fabricantes"])
     
@@ -453,25 +462,27 @@ else:
     if imagenes_prov or links_texto.strip():
         input_listo = True
 
-    # PROMPT MAESTRO DE EXTRACCIÓN COMERCIAL (CAMINO B)
+    # PROMPT MAESTRO CON VISIÓN INTEGRADA (BOUNDING BOXES PARA RECORTE COMERCIAL)
     prompt_proveedor = """
-    Analiza detalladamente los archivos o textos provistos (pueden ser una o varias capturas de pantalla de portales de proveedores, textos técnicos copiados, o información de fichas oficiales de fabricantes). 
-    Tu objetivo es actuar como un analista de compras experto y extraer los datos de cada producto de forma quirúrgica para construir una cotización limpia.
-
-    ⚠️ REGLAS INQUEBRANTABLES DE EXTRACCIÓN:
-    1. CÓDIGO / SKU: Identifica el código de fábrica, número de parte o SKU del producto. No inventes caracteres.
-    2. MARCA: Identifica la marca del producto (ej. BAHCO, YATO, etc.). Si en la captura aparece el logotipo visual de la marca, interprétalo correctamente.
-    3. DESCRIPCIÓN TÉCNICA: Extrae el nombre del producto y sus especificaciones clave (medidas, capacidad en toneladas, voltajes, etc.) de forma de título ejecutivo y limpio en español.
-    4. DETECCIÓN DE COSTO NETO:
-       - SI ES UN PANTALLAZO DE PORTAL DE PROVEEDOR: Busca el valor numérico que corresponda a tu costo de adquisición neto (puede figurar como "Precio Distribuidor", "Costo Neto", "Mi Precio", "Precio Mayorista"). Extráelo como un número entero o flotante puro sin puntos ni signos de peso.
-       - SI ES UN ENLACE DE FABRICANTE O NO TIENE PRECIO VISIBLE (Caso Catálogos tipo Bahco): No intentes buscar o inventar un valor. Asigna ESTRICTAMENTE el valor 0.0 en el campo de costo.
-
-    Devuelve ÚNICAMENTE un JSON puro con esta estructura, sin bloques markdown (```json):
+    Analiza detalladamente los archivos o textos provistos de portales de proveedores. Extrae los datos de cada producto de forma estrictamente individual.
+    CRÍTICO: Cada herramienta o artículo detectado debe ser un elemento separado en la lista 'productos'. NO los concatenes ni los juntes en un solo texto con saltos de línea (\\n).
+    
+    Además, identifica el recuadro visual exacto (bounding box) de la FOTO o imagen del producto dentro de la captura completa para poder recortarla dinámicamente.
+    
+    Devuelve ÚNICAMENTE un JSON puro con esta estructura, sin bloques markdown:
     {
         "productos": [
-            {"codigo": "CÓDIGO", "marca": "MARCA", "descripcion": "DESCRIPCIÓN", "costo_neto": 0.0, "cantidad": 1}
+            {
+                "codigo": "CÓDIGO",
+                "marca": "MARCA",
+                "descripcion": "DESCRIPCIÓN TÉCNICA EJECUTIVA EN ESPAÑOL",
+                "costo_neto": 0.0,
+                "cantidad": 1,
+                "box": [ymin, xmin, ymax, xmax]
+            }
         ]
     }
+    Nota: Los valores en 'box' deben ser números enteros entre 0 y 1000 basados en la cuadrícula de la imagen completa. Si no hay una foto clara de la herramienta, asigna [0, 0, 0, 0].
     """
 
 # PROCESADOR MAESTRO AL HACER CLIC EN GENERAR
@@ -534,8 +545,12 @@ if input_listo and api_key:
                         cand_list.append({"codigo": str(r[col_codigo]), "descripcion": str(r[col_desc]), "precio": float(limpiar_precio(r[col_precio]))})
                     candidates_rag[termino] = cand_list
                 
-                prompt_resolucion = "Actúas como un experto. Mapea el catálogo:\n" + json.dumps(candidates_rag, ensure_ascii=False) + "\nDevuelve JSON con resultados:[{busqueda_original, codigo_elegido, descripcion_elegida, precio_elegido}]."
-                response_res = model.generate_content(prompt_resolucion)
+                prompt_resolucion = """
+                Actúas como un experto en catalogación. Mapea cada búsqueda con el producto correspondiente del catálogo provisto.
+                CRÍTICO: Cada producto mapeado debe ser un objeto independiente en la lista final. NO unas múltiples productos en una sola celda o línea usando saltos de línea (\\n).
+                Devuelve JSON con resultados:[{"busqueda_original", "codigo_elegido", "descripcion_elegida", "precio_elegido"}].
+                """
+                response_res = model.generate_content([prompt_resolucion, json.dumps(candidates_rag, ensure_ascii=False)])
                 datos_finales = json.loads(response_res.text.strip().replace("```json", "").replace("```", ""))
                 
                 for res in datos_finales.get("resultados", []):
@@ -562,24 +577,46 @@ if input_listo and api_key:
                         "Precio_Final": px_final_neto, "Total_Neto": px_final_neto * cant
                     })
 
-            # --- RUTA DE EJECUCIÓN B: COSTO PROVEEDOR + MARGEN ---
+            # --- RUTA DE EJECUCIÓN B: COSTO PROVEEDOR + MARGEN (SOPORTE DE RECORTE VISUAL PIL) ---
             else:
-                st.info("🔄 Analizando capturas y extrayendo fichas técnicas web...")
+                st.info("🔄 Analizando capturas y ejecutando recortes visuales de herramientas...")
                 items_extraidos = []
                 
                 if imagenes_prov:
                     for img_file in imagenes_prov:
                         img_bytes = img_file.read()
-                        response_img = model.generate_content([prompt_proveedor, Image.open(io.BytesIO(img_bytes))])
+                        img_pil = Image.open(io.BytesIO(img_bytes))
+                        width, height = img_pil.size
+                        
+                        response_img = model.generate_content([prompt_proveedor, img_pil])
                         try:
                             json_data = json.loads(response_img.text.strip().replace("```json", "").replace("```", ""))
                             items_prov_list = json_data.get("productos", [])
-                            items_extraidos.extend(items_prov_list)
                             
-                            # ARQUITECTURA DE ASOCIACIÓN VISUAL AUTOMÁTICA
+                            # MOTOR DE RECORTE QUIRÚRGICO DE IMÁGENES
                             for item_p in items_prov_list:
-                                c_clean = str(item_p.get("codigo", "MANUAL")).strip().lower()
-                                st.session_state['dict_imagenes_session'][c_clean] = img_bytes
+                                cod_p = str(item_p.get("codigo", "MANUAL")).strip()
+                                c_clean = cod_p.lower().strip()
+                                box = item_p.get("box", [0, 0, 0, 0])
+                                
+                                if box != [0, 0, 0, 0] and len(box) == 4:
+                                    try:
+                                        ymin, xmin, ymax, xmax = box
+                                        if ymax > ymin and xmax > xmin:
+                                            # Conversión de coordenadas normalizadas (0-1000) a píxeles reales
+                                            left = int(xmin * width / 1000)
+                                            top = int(ymin * height / 1000)
+                                            right = int(xmax * width / 1000)
+                                            bottom = int(ymax * height / 1000)
+                                            
+                                            cropped_img = img_pil.crop((left, top, right, bottom))
+                                            
+                                            img_byte_arr = io.BytesIO()
+                                            cropped_img.save(img_byte_arr, format='PNG')
+                                            st.session_state['dict_imagenes_session'][c_clean] = img_byte_arr.getvalue()
+                                    except: pass
+                            
+                            items_extraidos.extend(items_prov_list)
                         except: pass
                         
                 if links_texto.strip():
@@ -614,11 +651,11 @@ if input_listo and api_key:
 
             if cotizacion_final:
                 st.session_state['df_resultado'] = pd.DataFrame(cotizacion_final)
-                st.success("¡Datos procesados! Revisa el cuadro interactivo abajo.")
+                st.success("¡Datos procesados con éxito! Revisa el cuadro interactivo abajo.")
         except Exception as e:
             st.error(f"Error en procesamiento comercial: {e}")
 
-# RENDERIZADO INTERACTIVO MAESTRO DESDE MEMORIA (Saneado definitivo y simétrico)
+# RENDERIZADO INTERACTIVO MAESTRO DESDE MEMORIA
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Editable en Pantalla)")
     st.caption("💡 Truco Comercial: Si algún producto de un link viene con costo $0, puedes hacer doble clic en la celda 'Costo Base / Lista ($)', digitar el valor real, presionar Enter y los cálculos se actualizarán al instante.")
@@ -639,7 +676,6 @@ if st.session_state['df_resultado'] is not None:
         use_container_width=True
     ).copy()
     
-    # Recalculador dinámico en tiempo real basado en las modificaciones en pantalla
     pm_global = limpiar_precio(precio_manual_input)
     if modo_operacion == "Catálogo Interno (Precio Lista)":
         if pm_global > 0: df_editable["Precio_Final"] = pm_global
@@ -667,7 +703,7 @@ if st.session_state['df_resultado'] is not None:
     
     st.markdown("---")
     
-    # Rescate de imágenes asociadas desde memoria para empaquetado final
+    # Rescate de fotos recortadas desde el almacenamiento temporal
     dict_img = st.session_state.get('dict_imagenes_session', {})
     
     excel_bin = generar_excel_comercial(
