@@ -13,10 +13,11 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.drawing.image import Image as OpenpyxlImage
 from fpdf import FPDF
 
-# Configuración de la página web
-st.set_page_config(page_title="Cotizador Express - VGM SpA", layout="wide")
+# Configuración de la página web (Actualizado a tu marca personal)
+st.set_page_config(page_title="Cotizador IA EHP", layout="wide")
 
 # AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR
+# Se mantiene la lectura en memoria EXCLUSIVAMENTE para inyectarlo en el PDF y Excel
 logo_bytes = None
 for ext in ["png", "jpg", "jpeg"]:
     if os.path.exists(f"logo.{ext}"):
@@ -24,13 +25,8 @@ for ext in ["png", "jpg", "jpeg"]:
             logo_bytes = f.read()
         break
 
-# DISEÑO DE CABECERA: Título formal a la izquierda y Logo pequeño a la derecha
-col_titulo, col_logo = st.columns([6, 1])
-with col_titulo:
-    st.title("Cotizador Express - VGM SpA 🔧")
-with col_logo:
-    if logo_bytes:
-        st.image(io.BytesIO(logo_bytes), width=110)
+# TÍTULO PRINCIPAL DE LA WEB (Logo web removido por completo y renombrado a tu marca)
+st.title("Cotizador IA EHP 🔧")
 
 # Inicializar estados de memoria para evitar que se borren los datos al hacer clic en descargas
 if 'df_resultado' not in st.session_state:
@@ -116,13 +112,12 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
-# FUNCIÓN AUXILIAR: Sanitiza strings para evitar roturas de formato por acentos en FPDF
 def clean_pdf_str(text):
     if pd.isna(text):
         return ""
     return str(text).encode('latin-1', 'replace').decode('latin-1')
 
-# FUNCIÓN: Generación de PDF Comercial Oficial con Filtro Antisolapamiento de Acentos
+# FUNCIÓN: Generación de PDF Comercial Oficial (Conserva el membrete de la empresa para el cliente)
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -228,7 +223,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial (Sin Líneas de Cuadrícula, Alturas Optimizadas)
+# FUNCIÓN: Generación de Excel Comercial Oficial (Conserva el membrete corporativo)
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -292,7 +287,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"
     ws["A7"].font = font_negrita
     
-    # AJUSTE ENRIQUE: Corregido error de traducción literal "proposal" por "propuesta"
     ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"
     ws["A8"].font = font_normal
     
@@ -328,7 +322,6 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total.number_format = '$#,##0'
         c_total.alignment = Alignment(horizontal="right", vertical="center")
         
-        # AJUSTE ENRIQUE: Fila dinámica compacta (22) si no existen imágenes cargadas.
         if dict_imagenes and cod_limpio in dict_imagenes:
             try:
                 img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio])
@@ -542,7 +535,7 @@ if input_listo and api_key:
                 candidates_rag[termino] = cand_list
 
             prompt_resolucion = """
-            Actúas como un expert en repuestos y herramientas industriales para la empresa VGM SpA.
+            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA.
             Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
             
             ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
@@ -559,7 +552,7 @@ if input_listo and api_key:
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             """ + json.dumps(candidates_rag, ensure_ascii=False, indent=2) + """
             
-            Devuelve ÚNICAMENTE un JSON structured de la siguiente forma, sin bloques markdown ni texto adicional:
+            Devuelve ÚNICAMENTE un JSON estructurado de la siguiente forma, sin bloques markdown ni texto adicional:
             {
                 "resultados": [
                     {
@@ -626,7 +619,7 @@ if input_listo and api_key:
         except Exception as e:
             st.error(f"Error en procesamiento comercial: {e}")
 
-# RENDERIZADO ESTABLE DESDE MEMORIA (Previene parpadeos o borrados en terreno)
+# RENDERIZADO ESTABLE DESDE MEMORIA
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Listo para Captura)")
     st.dataframe(
@@ -648,7 +641,6 @@ if st.session_state['df_resultado'] is not None:
     
     dict_img = {}
     
-    # Inyección dinámica de variables al generar archivos binarios
     excel_bin = generar_excel_comercial(
         st.session_state['df_resultado'], nombre_cliente, empresa_cliente, numero_folio,
         st.session_state['total_neto_final'], st.session_state['iva_calculado'], st.session_state['total_bruto'],
