@@ -6,6 +6,7 @@ from PIL import Image
 import unicodedata
 import io
 import os
+import hashlib
 
 # Importaciones nativas para diseño avanzado de Excel y PDF
 import openpyxl
@@ -40,6 +41,21 @@ if 'dict_imagenes_session' not in st.session_state:
 
 # Lista de palabras vacías en español para limpiar búsquedas del catálogo
 STOP_WORDS = {'de', 'para', 'con', 'un', 'una', 'el', 'la', 'los', 'las', 'del', 'al', 'en', 'y', 'por', 'sobre', 'kit', 'juego', 'set'}
+
+def enmascarar_codigo(codigo, marca):
+    """
+    Transforma códigos reales de proveedores en SKUs exclusivos e irrastreables de VGM SpA
+    para evitar que el cliente final cotice directo con el importador.
+    """
+    if not codigo or str(codigo).strip().upper() == "MANUAL":
+        return "VGM-SKU-99"
+    cod_str = str(codigo).strip().upper()
+    m_str = "".join(c for c in str(marca) if c.isalnum()).upper()[:3]
+    if not m_str:
+        m_str = "VGM"
+    # Genera un hash único determinista de 6 caracteres basado en el SKU original
+    hash_part = hashlib.md5(cod_str.encode()).hexdigest().upper()[:6]
+    return f"VGM-{m_str}-{hash_part}"
 
 def normalizar_texto(texto):
     if pd.isna(texto):
@@ -110,7 +126,7 @@ def leer_equivalencias(ruta_archivo="equivalencias.csv"):
     encodings = ['utf-8', 'latin1', 'iso-8859-1', 'utf-8-sig', 'cp1252']
     delimitadores = [';', ',']
     for enc in encodings:
-        for sep in delimiters:
+        for sep in delimitadores:
             try:
                 df_eq = pd.read_csv(ruta_archivo, sep=sep, encoding=enc)
                 df_eq.columns = [str(c).strip().lower() for c in df_eq.columns]
@@ -149,7 +165,7 @@ def clean_pdf_str(text):
         return ""
     return str(text).encode('latin-1', 'replace').decode('latin-1')
 
-# FUNCIÓN: Generación de PDF Comercial Premium (Con Centrado Absoluto e Inyección de Imágenes Recortadas)
+# FUNCIÓN: Generación de PDF Comercial Premium (Códigos Ofuscados + Centrado + Fotos Grandes)
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -177,25 +193,26 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.cell(0, 5, clean_pdf_str("En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"), ln=True)
     pdf.ln(4)
     
-    # Ancho total disponible: 190mm (Perfectamente distribuido con columna IMAGEN)
+    # Ancho total disponible: 190mm (Distribución simétrica de alta visibilidad)
     pdf.set_font("helvetica", "B", 9)
     pdf.set_fill_color(54, 95, 145)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(22, 8, clean_pdf_str("CÓDIGO"), border=1, align="C", fill=True)
+    pdf.cell(24, 8, clean_pdf_str("CÓDIGO"), border=1, align="C", fill=True)
     pdf.cell(20, 8, clean_pdf_str("MARCA"), border=1, align="C", fill=True)
-    pdf.cell(68, 8, clean_pdf_str("DESCRIPCIÓN"), border=1, align="C", fill=True)
+    pdf.cell(56, 8, clean_pdf_str("DESCRIPCIÓN"), border=1, align="C", fill=True)
     pdf.cell(24, 8, clean_pdf_str("P. UNIT NETO"), border=1, align="C", fill=True)
-    pdf.cell(12, 8, clean_pdf_str("CANT"), border=1, align="C", fill=True)
+    pdf.cell(10, 8, clean_pdf_str("CANT"), border=1, align="C", fill=True)
     pdf.cell(24, 8, clean_pdf_str("TOTAL NETO"), border=1, align="C", fill=True)
-    pdf.cell(20, 8, clean_pdf_str("IMAGEN"), border=1, align="C", fill=True)
+    pdf.cell(32, 8, clean_pdf_str("IMAGEN"), border=1, align="C", fill=True)
     pdf.ln(8)
     
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("helvetica", "", 9)
     
     for _, fila in df_cotiz.iterrows():
-        cod = str(fila["Codigo"])
-        cod_limpio = cod.strip().lower()
+        # MEDIDA DE PROTECCIÓN COMERCIAL: Se inyecta el código inventado corporativo
+        codigo_vgm = enmascarar_codigo(fila["Codigo"], fila["Marca"])
+        cod_limpio_prov = str(fila["Codigo"]).strip().lower()
         marca = str(fila["Marca"])
         desc = str(fila["Descripcion"]).replace("⚠️ (Match sugerido) ", "")
         p_unit = f"${float(fila['Precio_Final']):,.0f}"
@@ -203,60 +220,60 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
         total = f"${float(fila['Total_Neto']):,.0f}"
         
         # CALCULADOR MAESTRO DE ALTURA Y TEXTO MULTILÍNEA CENTRADO
-        caracteres_por_linea = 34
+        caracteres_por_linea = 28
         lineas_estimadas = max(1, -(-len(desc) // caracteres_por_linea))
-        alto_fila = max(lineas_estimadas * 4 + 6, 22) # 22mm de base para que luzca holgada la foto
+        alto_fila = max(lineas_estimadas * 4 + 6, 34) # Mínimo 34mm para que la foto luzca GIGANTE y nítida
         
         current_y = pdf.get_y()
         
-        # Renderizado de celdas estándar (Auto-centradas verticalmente por FPDF)
-        pdf.cell(22, alto_fila, clean_pdf_str(cod), border=1, align="C")
+        pdf.cell(24, alto_fila, clean_pdf_str(codigo_vgm), border=1, align="C")
         pdf.cell(20, alto_fila, clean_pdf_str(marca), border=1, align="C")
         
-        # CENTRADO ABSOLUTO (HORIZONTAL Y VERTICAL) DE LA CELDA DESCRIPCIÓN
+        # Centrado geométrico perfecto de la celda de descripción
         pos_desc_x = pdf.get_x()
-        pdf.cell(68, alto_fila, "", border=1) # Dibuja el marco estructural de la celda
+        pdf.cell(56, alto_fila, "", border=1)
         alto_bloque_texto = lineas_estimadas * 4
         y_centrado_perfecto = current_y + (alto_fila - alto_bloque_texto) / 2
         
         pdf.set_xy(pos_desc_x, y_centrado_perfecto)
-        pdf.multi_cell(68, 4, clean_pdf_str(desc), border=0, align="C") # align="C" Centra horizontalmente
-        pdf.set_xy(pos_desc_x + 68, current_y) # Restaura el cursor al borde derecho de la celda
+        pdf.multi_cell(56, 4, clean_pdf_str(desc), border=0, align="C")
+        pdf.set_xy(pos_desc_x + 56, current_y)
         
         pdf.cell(24, alto_fila, clean_pdf_str(p_unit), border=1, align="R")
-        pdf.cell(12, alto_fila, clean_pdf_str(cant), border=1, align="C")
+        pdf.cell(10, alto_fila, clean_pdf_str(cant), border=1, align="C")
         pdf.cell(24, alto_fila, clean_pdf_str(total), border=1, align="R")
         
-        # CENTRADO E INYECCIÓN DE LA FOTO RECORTADA DEL PRODUCTO
+        # COLUMNA IMAGEN REPOTENCIADA: Foto grande de 28x28mm centrada en celda de 32mm
         pos_img_x = pdf.get_x()
-        pdf.cell(20, alto_fila, "", border=1, align="C")
-        if dict_imagenes and cod_limpio in dict_imagenes:
+        pdf.cell(32, alto_fila, "", border=1, align="C")
+        if dict_imagenes and cod_limpio_prov in dict_imagenes:
             try:
-                img_data = dict_imagenes[cod_limpio]
-                offset_x = pos_img_x + (20 - 16) / 2  # Centrado horizontal exacto
-                offset_y = current_y + (alto_fila - 16) / 2 # Centrado vertical exacto
-                pdf.image(io.BytesIO(img_data), x=offset_x, y=offset_y, w=16, h=16)
+                img_data = dict_imagenes[cod_limpio_prov]
+                offset_x = pos_img_x + (32 - 28) / 2
+                offset_y = current_y + (alto_fila - 28) / 2
+                pdf.image(io.BytesIO(img_data), x=offset_x, y=offset_y, w=28, h=28)
             except: pass
             
         pdf.ln(alto_fila)
         
     pdf.ln(5)
     pdf.set_font("helvetica", "B", 10)
-    pdf.cell(146, 6, clean_pdf_str("Observaciones:"), border=0)
+    # Bloque de cierre económico perfectamente alineado (134 + 24 + 32 = 190mm)
+    pdf.cell(134, 6, clean_pdf_str("Observaciones:"), border=0)
     pdf.cell(24, 6, clean_pdf_str("SUBTOTAL"), border=1, align="R")
-    pdf.cell(20, 6, clean_pdf_str(f"${total_neto:,.0f}"), border=1, align="R")
+    pdf.cell(32, 6, clean_pdf_str(f"${total_neto:,.0f}"), border=1, align="R")
     pdf.ln(6)
     pdf.set_font("helvetica", "", 9)
-    pdf.cell(146, 6, clean_pdf_str("1: Plazo de entrega por confirmar"), border=0)
+    pdf.cell(134, 6, clean_pdf_str("1: Plazo de entrega por confirmar"), border=0)
     pdf.set_font("helvetica", "B", 10)
     pdf.cell(24, 6, clean_pdf_str("IVA"), border=1, align="R")
-    pdf.cell(20, 6, clean_pdf_str(f"${iva:,.0f}"), border=1, align="R")
+    pdf.cell(32, 6, clean_pdf_str(f"${iva:,.0f}"), border=1, align="R")
     pdf.ln(6)
-    pdf.cell(146, 6, clean_pdf_str("2. Validez de cotización: 7 días"), border=0)
+    pdf.cell(134, 6, clean_pdf_str("2. Validez de cotización: 7 días"), border=0)
     pdf.set_font("helvetica", "B", 10)
     pdf.set_fill_color(233, 237, 244)
     pdf.cell(24, 6, clean_pdf_str("TOTAL"), border=1, align="R")
-    pdf.cell(20, 6, clean_pdf_str(f"${total_bruto:,.0f}"), border=1, align="R", fill=True)
+    pdf.cell(32, 6, clean_pdf_str(f"${total_bruto:,.0f}"), border=1, align="R", fill=True)
     pdf.ln(8)
     
     pdf.set_font("helvetica", "B", 10)
@@ -269,7 +286,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.cell(70, 5, clean_pdf_str("VGM SpA"), ln=1, align="R")
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial (Con soporte de Imagen Acoplada)
+# FUNCIÓN: Generación de Excel Comercial Oficial (Con Soporte de Imagen de Gran Tamaño)
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -322,9 +339,11 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
-        cod_original = str(fila["Codigo"])
-        cod_limpio = cod_original.strip().lower()
-        ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
+        # MEDIDA DE PROTECCIÓN COMERCIAL: Se aplica el enmascaramiento en el Excel final
+        codigo_vgm_ex = enmascarar_codigo(fila["Codigo"], fila["Marca"])
+        cod_limpio_prov = str(fila["Codigo"]).strip().lower()
+        
+        ws.cell(row=fila_actual, column=1, value=codigo_vgm_ex).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
         desc_excel = str(fila["Descripcion"]).replace("⚠️ (Match sugerido) ", "")
         ws.cell(row=fila_actual, column=3, value=desc_excel).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -336,15 +355,16 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         c_total = ws.cell(row=fila_actual, column=6, value=float(fila["Total_Neto"]))
         c_total.number_format = '$#,##0'; c_total.alignment = Alignment(horizontal="right", vertical="center")
         
-        if dict_imagenes and cod_limpio in dict_imagenes:
+        # EXCEL CON FOTO REPOTENCIADA: Celda grande y centrada
+        if dict_imagenes and cod_limpio_prov in dict_imagenes:
             try:
-                img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio])
+                img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio_prov])
                 img_excel = OpenpyxlImage(img_prod_stream)
-                img_excel.width = 110; img_excel.height = 80
+                img_excel.width = 150; img_excel.height = 130 # Escalado de alta definición
                 ws.add_image(img_excel, f"G{fila_actual}")
-                ws.row_dimensions[fila_actual].height = 68
-            except: ws.row_dimensions[fila_actual].height = 24
-        else: ws.row_dimensions[fila_actual].height = 24
+                ws.row_dimensions[fila_actual].height = 110 # Altura de fila expandida
+            except: ws.row_dimensions[fila_actual].height = 26
+        else: ws.row_dimensions[fila_actual].height = 26
             
         for c_idx in range(1, 8):
             ws.cell(row=fila_actual, column=c_idx).border = borde_delgado; ws.cell(row=fila_actual, column=c_idx).font = font_normal
@@ -369,7 +389,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws.cell(row=fila_actual, column=1, value=f"Condiciones de Pago: {condicion_pago.upper()}").font = font_negrita
     ws.cell(row=fila_actual, column=7, value="VGM SpA").font = font_negrita; ws.cell(row=fila_actual, column=7).alignment = Alignment(horizontal="right")
     
-    ws.column_dimensions['A'].width = 14; ws.column_dimensions['B'].width = 14; ws.column_dimensions['C'].width = 46; ws.column_dimensions['D'].width = 24; ws.column_dimensions['E'].width = 12; ws.column_dimensions['F'].width = 24; ws.column_dimensions['G'].width = 24
+    ws.column_dimensions['A'].width = 18; ws.column_dimensions['B'].width = 14; ws.column_dimensions['C'].width = 46; ws.column_dimensions['D'].width = 24; ws.column_dimensions['E'].width = 12; ws.column_dimensions['F'].width = 24; ws.column_dimensions['G'].width = 32
     wb.save(output)
     return output.getvalue()
 
@@ -425,7 +445,6 @@ if modo_operacion == "Catálogo Interno (Precio Lista)":
     input_listo = False
     contenido_para_gemini = []
     
-    # REGLA ANTIMEZCLA: Obliga a separar productos en la extracción inicial
     prompt_extraccion = """
     Analiza detalladamente esta solicitud de pedido (puede ser imagen, texto o PDF). Extrae cada producto solicitado y su cantidad precisa de forma INDIVIDUAL.
     Cada herramienta o artículo debe ser un elemento independiente en la lista 'productos'. NO mezcles ni concatenes productos distintos en una sola línea o campo.
@@ -462,7 +481,6 @@ else:
     if imagenes_prov or links_texto.strip():
         input_listo = True
 
-    # PROMPT MAESTRO CON VISIÓN INTEGRADA (BOUNDING BOXES PARA RECORTE COMERCIAL)
     prompt_proveedor = """
     Analiza detalladamente los archivos o textos provistos de portales de proveedores. Extrae los datos de cada producto de forma estrictamente individual.
     CRÍTICO: Cada herramienta o artículo detectado debe ser un elemento separado en la lista 'productos'. NO los concatenes ni los juntes en un solo texto con saltos de línea (\\n).
@@ -577,7 +595,7 @@ if input_listo and api_key:
                         "Precio_Final": px_final_neto, "Total_Neto": px_final_neto * cant
                     })
 
-            # --- RUTA DE EJECUCIÓN B: COSTO PROVEEDOR + MARGEN (SOPORTE DE RECORTE VISUAL PIL) ---
+            # --- RUTA DE EJECUCIÓN B: COSTO PROVEEDOR + MARGEN ---
             else:
                 st.info("🔄 Analizando capturas y ejecutando recortes visuales de herramientas...")
                 items_extraidos = []
@@ -603,7 +621,6 @@ if input_listo and api_key:
                                     try:
                                         ymin, xmin, ymax, xmax = box
                                         if ymax > ymin and xmax > xmin:
-                                            # Conversión de coordenadas normalizadas (0-1000) a píxeles reales
                                             left = int(xmin * width / 1000)
                                             top = int(ymin * height / 1000)
                                             right = int(xmax * width / 1000)
@@ -621,11 +638,11 @@ if input_listo and api_key:
                         
                 if links_texto.strip():
                     urls = [u.strip() for u in links_texto.split("\n") if u.strip()]
-                    texto_consolidado_urls = ""
+                    texto_consolidated = ""
                     for u in urls:
-                        texto_consolidado_urls += f"\n--- CONTENIDO TÉCNICO DE LA URL: {u} ---\n" + extraer_texto_de_url(u)
-                    if texto_consolidado_urls.strip():
-                        response_link = model.generate_content(prompt_proveedor + "\n\nTEXTO CAPTURADO:\n" + texto_consolidado_urls)
+                        texto_consolidated += f"\n--- CONTENIDO TÉCNICO DE LA URL: {u} ---\n" + extraer_texto_de_url(u)
+                    if texto_consolidated.strip():
+                        response_link = model.generate_content(prompt_proveedor + "\n\nTEXTO CAPTURADO:\n" + texto_consolidated)
                         try:
                             json_data = json.loads(response_link.text.strip().replace("```json", "").replace("```", ""))
                             items_extraidos.extend(json_data.get("productos", []))
@@ -658,12 +675,12 @@ if input_listo and api_key:
 # RENDERIZADO INTERACTIVO MAESTRO DESDE MEMORIA
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Editable en Pantalla)")
-    st.caption("💡 Truco Comercial: Si algún producto de un link viene con costo $0, puedes hacer doble clic en la celda 'Costo Base / Lista ($)', digitar el valor real, presionar Enter y los cálculos se actualizarán al instante.")
+    st.caption("💡 Tip Corporativo: Aquí ves tus códigos reales de compra para tu control interno. Al exportar a PDF o Excel, la IA los convertirá automáticamente en códigos enmascarados de VGM SpA.")
     
     df_editable = st.data_editor(
         st.session_state['df_resultado'],
         column_config={
-            "Codigo": st.column_config.TextColumn("Código"),
+            "Codigo": st.column_config.TextColumn("Código Real Proveedor"),
             "Marca": st.column_config.TextColumn("Marca"),
             "Descripcion": st.column_config.TextColumn("Descripción Catálogo"),
             "Cantidad": st.column_config.NumberColumn("Cant", min_value=1),
