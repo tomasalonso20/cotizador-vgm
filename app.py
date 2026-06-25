@@ -191,12 +191,12 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("helvetica", "", 9)
     for _, fila in df_cotiz.iterrows():
-        cod = str(fila["Código"])
+        cod = str(fila["Codigo"])
         marca = str(fila["Marca"])
-        desc = str(fila["Descripción Catálogo"]).replace("⚠️ (Match sugerido) ", "")
-        p_unit = f"${float(fila['Precio Final (Neto)']):,.0f}"
+        desc = str(fila["Descripcion"]).replace("⚠️ (Match sugerido) ", "")
+        p_unit = f"${float(fila['Precio_Final']):,.0f}"
         cant = str(int(fila["Cantidad"]))
-        total = f"${float(fila['Total Neto']):,.0f}"
+        total = f"${float(fila['Total_Neto']):,.0f}"
         if len(desc) > 42: desc = desc[:39] + "..."
         pdf.cell(24, 7, clean_pdf_str(cod), border=1, align="C")
         pdf.cell(24, 7, clean_pdf_str(marca), border=1, align="C")
@@ -283,16 +283,16 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     
     fila_actual = fila_tabla_inicio + 1
     for _, fila in df_cotiz.iterrows():
-        cod_original = str(fila["Código"])
+        cod_original = str(fila["Codigo"])
         cod_limpio = cod_original.strip().lower()
         ws.cell(row=fila_actual, column=1, value=cod_original).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
-        desc_excel = str(fila["Descripción Catálogo"]).replace("⚠️ (Match sugerido) ", "")
+        desc_excel = str(fila["Descripcion"]).replace("⚠️ (Match sugerido) ", "")
         ws.cell(row=fila_actual, column=3, value=desc_excel).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        c_neto = ws.cell(row=fila_actual, column=4, value=float(fila["Precio Final (Neto)"]))
+        c_neto = ws.cell(row=fila_actual, column=4, value=float(fila["Precio_Final"]))
         c_neto.number_format = '$#,##0'; c_neto.alignment = Alignment(horizontal="right", vertical="center")
         ws.cell(row=fila_actual, column=5, value=int(fila["Cantidad"])).alignment = Alignment(horizontal="center", vertical="center")
-        c_total = ws.cell(row=fila_actual, column=6, value=float(fila["Total Neto"]))
+        c_total = ws.cell(row=fila_actual, column=6, value=float(fila["Total_Neto"]))
         c_total.number_format = '$#,##0'; c_total.alignment = Alignment(horizontal="right", vertical="center")
         
         if dict_imagenes and cod_limpio in dict_imagenes:
@@ -427,7 +427,7 @@ else:
     ⚠️ REGLAS INQUEBRANTABLES DE EXTRACCIÓN:
     1. CÓDIGO / SKU: Identifica el código de fábrica, número de parte o SKU del producto. No inventes caracteres.
     2. MARCA: Identifica la marca del producto (ej. BAHCO, YATO, etc.). Si en la captura aparece el logotipo visual de la marca, interprétalo correctamente.
-    3. DESCRIPCIÓN TÉCNICA: Extrae el nombre del producto and sus especificaciones clave (medidas, capacidad en toneladas, voltajes, etc.) de forma de título ejecutivo y limpio en español.
+    3. DESCRIPCIÓN TÉCNICA: Extrae el nombre del producto y sus especificaciones clave (medidas, capacidad en toneladas, voltajes, etc.) de forma de título ejecutivo y limpio en español.
     4. DETECCIÓN DE COSTO NETO:
        - SI ES UN PANTALLAZO DE PORTAL DE PROVEEDOR: Busca el valor numérico que corresponda a tu costo de adquisición neto (puede figurar como "Precio Distribuidor", "Costo Neto", "Mi Precio", "Precio Mayorista"). Extráelo como un número entero o flotante puro sin puntos ni signos de peso.
        - SI ES UN ENLACE DE FABRICANTE O NO TIENE PRECIO VISIBLE (Caso Catálogos tipo Bahco): No intentes buscar o inventar un valor. Asigna ESTRICTAMENTE el valor 0.0 en el campo de costo.
@@ -523,9 +523,9 @@ if input_listo and api_key:
                     if pm_val > 0: px_final_neto = pm_val
                     
                     cotizacion_final.append({
-                        "Código": cod, "Marca": marca, "Descripción Catálogo": desc, "Cantidad": cant,
-                        "Precio Lista (Neto)": px_lista, "Descuento Aplicado": f"{descuento_aplicar}%" if descuento_aplicar > 0 else "0%",
-                        "Precio Final (Neto)": px_final_neto, "Total Neto": px_final_neto * cant
+                        "Codigo": cod, "Marca": marca, "Descripcion": desc, "Cantidad": cant,
+                        "Precio_Lista": px_lista, "Descuento": f"{descuento_aplicar}%" if descuento_aplicar > 0 else "0%",
+                        "Precio_Final": px_final_neto, "Total_Neto": px_final_neto * cant
                     })
 
             # --- RUTA DE EJECUCIÓN B: COSTO PROVEEDOR + MARGEN ---
@@ -565,10 +565,10 @@ if input_listo and api_key:
                     if pm_val > 0: px_final_neto = pm_val
                     
                     cotizacion_final.append({
-                        "Código": cod, "Marca": marca, "Descripción Catálogo": desc, "Cantidad": cant,
-                        "Precio Lista (Neto)": costo_base,
-                        "Descuento Aplicado": f"+{margen_objetivo}% Margen",
-                        "Precio Final (Neto)": px_final_neto, "Total Neto": px_final_neto * cant
+                        "Codigo": cod, "Marca": marca, "Descripcion": desc, "Cantidad": cant,
+                        "Precio_Lista": costo_base,
+                        "Descuento": f"+{margen_objetivo}% Margen",
+                        "Precio_Final": px_final_neto, "Total_Neto": px_final_neto * cant
                     })
 
             if cotizacion_final:
@@ -580,36 +580,40 @@ if input_listo and api_key:
 # RENDERIZADO INTERACTIVO MAESTRO DESDE MEMORIA (Saneado definitivo)
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Editable en Pantalla)")
-    st.caption("💡 Truco Comercial: Si algún producto de un link viene con costo $0, puedes hacer doble clic en la celda 'Precio Lista (Neto)', digitar el valor real, presionar Enter y los cálculos se actualizarán al instante.")
+    st.caption("💡 Truco Comercial: Si algún producto de un link viene con costo $0, puedes hacer doble clic en la celda 'Costo Base / Lista ($)', digitar el valor real, presionar Enter y los cálculos se actualizarán al instante.")
     
-    # SOLUCIÓN DE SANEAMIENTO: Las columnas con diseño visual (Precio Lista, Precio Final, Total Neto)
-    # se omiten POR COMPLETO de la lista global de 'disabled'. Así no existe ningún cruce de variables.
+    # SOLUCIÓN DE SANEAMIENTO: Las columnas internas usan llaves ASCII limpias (sin tildes ni espacios). 
+    # El bloqueo 'disabled' apunta de forma segura a estas llaves estables. El usuario ve los títulos perfectos.
     df_editable = st.data_editor(
         st.session_state['df_resultado'],
         column_config={
-            "Precio Lista (Neto)": st.column_config.NumberColumn("Costo Base / Lista ($)", format="$%.0f"),
-            "Precio Final (Neto)": st.column_config.NumberColumn("P. Venta Neto ($)", format="$%.0f"),
-            "Total Neto": st.column_config.NumberColumn("Total Neto ($)", format="$%.0f"),
+            "Codigo": st.column_config.TextColumn("Código"),
+            "Marca": st.column_config.TextColumn("Marca"),
+            "Descripcion": st.column_config.TextColumn("Descripción Catálogo"),
             "Cantidad": st.column_config.NumberColumn("Cant", min_value=1),
+            "Precio_Lista": st.column_config.NumberColumn("Costo Base / Lista ($)", format="$%.0f"),
+            "Descuento": st.column_config.TextColumn("Descuento Aplicado"),
+            "Precio_Final": st.column_config.NumberColumn("P. Venta Neto ($)", format="$%.0f"),
+            "Total_Neto": st.column_config.NumberColumn("Total Neto ($)", format="$%.0f"),
         },
-        disabled=["Código", "Marca", "Descripción Catálogo", "Descuento Aplicado"],
+        disabled=["Codigo", "Marca", "Descripcion", "Descuento", "Precio_Final", "Total_Neto"],
         use_container_width=True
     ).copy()
     
     # Recalculador dinámico en tiempo real basado en las modificaciones en pantalla
     pm_global = limpiar_precio(precio_manual_input)
     if modo_operacion == "Catálogo Interno (Precio Lista)":
-        if pm_global > 0: df_editable["Precio Final (Neto)"] = pm_global
-        else: df_editable["Precio Final (Neto)"] = df_editable["Precio Lista (Neto)"] * (1 - (descuento_aplicar / 100))
+        if pm_global > 0: df_editable["Precio_Final"] = pm_global
+        else: df_editable["Precio_Final"] = df_editable["Precio_Lista"] * (1 - (descuento_aplicar / 100))
     else:
-        if pm_global > 0: df_editable["Precio Final (Neto)"] = pm_global
-        else: df_editable["Precio Final (Neto)"] = df_editable["Precio Lista (Neto)"] * (1 + (margen_objetivo / 100))
+        if pm_global > 0: df_editable["Precio_Final"] = pm_global
+        else: df_editable["Precio_Final"] = df_editable["Precio_Lista"] * (1 + (margen_objetivo / 100))
         
-    df_editable["Total Neto"] = df_editable["Precio Final (Neto)"] * df_editable["Cantidad"]
+    df_editable["Total_Neto"] = df_editable["Precio_Final"] * df_editable["Cantidad"]
     
     # Actualización de Métricas Globales
-    subtotal_lista_v = sum(df_editable["Precio Lista (Neto)"] * df_editable["Cantidad"])
-    total_neto_final_v = sum(df_editable["Total Neto"])
+    subtotal_lista_v = sum(df_editable["Precio_Lista"] * df_editable["Cantidad"])
+    total_neto_final_v = sum(df_editable["Total_Neto"])
     descuento_total_pesos_v = max(subtotal_lista_v - total_neto_final_v, 0.0) if modo_operacion == "Catálogo Interno (Precio Lista)" else 0.0
     iva_calculado_v = total_neto_final_v * 0.19
     total_bruto_v = total_neto_final_v + iva_calculado_v
