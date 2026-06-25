@@ -53,6 +53,7 @@ def enmascarar_codigo(codigo, marca):
     m_str = "".join(c for c in str(marca) if c.isalnum()).upper()[:3]
     if not m_str:
         m_str = "VGM"
+    # Genera un hash único determinista de 6 caracteres basado en el SKU original
     hash_part = hashlib.md5(cod_str.encode()).hexdigest().upper()[:6]
     return f"VGM-{m_str}-{hash_part}"
 
@@ -164,7 +165,7 @@ def clean_pdf_str(text):
         return ""
     return str(text).encode('latin-1', 'replace').decode('latin-1')
 
-# FUNCIÓN: Generación de PDF Comercial Premium (Alineado Izquierda Elegante + Fotos Grandes)
+# FUNCIÓN: Generación de PDF Comercial Premium (Alineación Izquierda + Fotos Grandes)
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -192,7 +193,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.cell(0, 5, clean_pdf_str("En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"), ln=True)
     pdf.ln(4)
     
-    # Tabla simétrica optimizada para ancho de 190mm total
+    # Tabla milimétrica optimizada (190mm Totales)
     pdf.set_font("helvetica", "B", 9)
     pdf.set_fill_color(54, 95, 145)
     pdf.set_text_color(255, 255, 255)
@@ -217,30 +218,31 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
         cant = str(int(fila["Cantidad"]))
         total = f"${float(fila['Total_Neto']):,.0f}"
         
-        caracteres_por_linea = 30
+        # CALCULADOR DE ALTURA COMPACTO
+        caracteres_por_linea = 28
         lineas_estimadas = max(1, -(-len(desc) // caracteres_por_linea))
-        alto_fila = max(lineas_estimadas * 4 + 6, 34) # Mínimo 34mm para la foto grande
+        alto_fila = max(lineas_estimadas * 4 + 6, 34)
         
         current_y = pdf.get_y()
         
         pdf.cell(24, alto_fila, clean_pdf_str(codigo_vgm), border=1, align="C")
         pdf.cell(20, alto_fila, clean_pdf_str(marca), border=1, align="C")
         
-        # CAMBIO: Alineado a la izquierda (L) con centrado geométrico vertical para máxima legibilidad
+        # ALINEACIÓN DEFINITIVA: Izquierda en horizontal (`align="L"`) + Centrado Vertical
         pos_desc_x = pdf.get_x()
         pdf.cell(56, alto_fila, "", border=1)
         alto_bloque_texto = lineas_estimadas * 4
         y_centrado_perfecto = current_y + (alto_fila - alto_bloque_texto) / 2
         
-        pdf.set_xy(pos_desc_x + 2, y_centrado_perfecto) # Margen de cortesía de 2mm a la izquierda
-        pdf.multi_cell(52, 4, clean_pdf_str(desc), border=0, align="L")
+        pdf.set_xy(pos_desc_x, y_centrado_perfecto)
+        pdf.multi_cell(56, 4, clean_pdf_str(desc), border=0, align="L")
         pdf.set_xy(pos_desc_x + 56, current_y)
         
         pdf.cell(24, alto_fila, clean_pdf_str(p_unit), border=1, align="R")
         pdf.cell(10, alto_fila, clean_pdf_str(cant), border=1, align="C")
         pdf.cell(24, alto_fila, clean_pdf_str(total), border=1, align="R")
         
-        # Foto de Herramienta de alta definición (28x28mm) centrada
+        # Columna Imagen Corporativa Optimizada (28x28mm en celda de 32mm)
         pos_img_x = pdf.get_x()
         pdf.cell(32, alto_fila, "", border=1, align="C")
         if dict_imagenes and cod_limpio_prov in dict_imagenes:
@@ -282,7 +284,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.cell(70, 5, clean_pdf_str("VGM SpA"), ln=1, align="R")
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial (Alineación y Cuadro de Totales Corregido)
+# FUNCIÓN: Generación de Excel Comercial Oficial
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -341,7 +343,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         ws.cell(row=fila_actual, column=1, value=codigo_vgm_ex).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=fila_actual, column=2, value=str(fila["Marca"])).alignment = Alignment(horizontal="center", vertical="center")
         
-        # CAMBIO: Alineación a la izquierda horizontal para mantener estética ejecutiva limpia
+        # CORRECCIÓN DE ALINEACIÓN EXCEL: Izquierda y Centro Vertical
         desc_excel = str(fila["Descripcion"]).replace("⚠️ (Match sugerido) ", "")
         ws.cell(row=fila_actual, column=3, value=desc_excel).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         
@@ -356,9 +358,9 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
             try:
                 img_prod_stream = io.BytesIO(dict_imagenes[cod_limpio_prov])
                 img_excel = OpenpyxlImage(img_prod_stream)
-                img_excel.width = 130; img_excel.height = 130  # Escalado nítido cuadrado
+                img_excel.width = 150; img_excel.height = 130
                 ws.add_image(img_excel, f"G{fila_actual}")
-                ws.row_dimensions[fila_actual].height = 110  # Altura perfecta idéntica a tu plantilla
+                ws.row_dimensions[fila_actual].height = 110
             except: ws.row_dimensions[fila_actual].height = 26
         else: ws.row_dimensions[fila_actual].height = 26
             
@@ -367,16 +369,15 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
         fila_actual += 1
         
     ws.cell(row=fila_actual, column=1, value="Observaciones:").font = font_negrita
-    # CAMBIO: Bloque corrido a Columnas 6 y 7 (F y G) para calzar al milímetro con tus cabeceras
-    celda_lbl_sub = ws.cell(row=fila_actual, column=6, value="SUBTOTAL"); celda_lbl_sub.font = font_negrita; celda_lbl_sub.alignment = Alignment(horizontal="right", vertical="center"); celda_lbl_sub.border = borde_delgado
-    celda_val_sub = ws.cell(row=fila_actual, column=7, value=total_neto); celda_val_sub.font = font_negrita; celda_val_sub.number_format = '$#,##0'; celda_val_sub.alignment = Alignment(horizontal="right", vertical="center"); celda_val_sub.border = borde_delgado
+    celda_lbl_sub = ws.cell(row=fila_actual, column=5, value="SUBTOTAL"); celda_lbl_sub.font = font_negrita; celda_lbl_sub.alignment = Alignment(horizontal="right", vertical="center"); celda_lbl_sub.border = borde_delgado
+    celda_val_sub = ws.cell(row=fila_actual, column=6, value=total_neto); celda_val_sub.font = font_negrita; celda_val_sub.number_format = '$#,##0'; celda_val_sub.alignment = Alignment(horizontal="right", vertical="center"); celda_val_sub.border = borde_delgado
     fila_actual += 1
-    celda_lbl_iva = ws.cell(row=fila_actual, column=6, value="IVA"); celda_lbl_iva.font = font_negrita; celda_lbl_iva.alignment = Alignment(horizontal="right", vertical="center"); celda_lbl_iva.border = borde_delgado
-    celda_val_iva = ws.cell(row=fila_actual, column=7, value=iva); celda_val_iva.font = font_negrita; celda_val_iva.number_format = '$#,##0'; celda_val_iva.alignment = Alignment(horizontal="right", vertical="center"); celda_val_iva.border = borde_delgado
+    celda_lbl_iva = ws.cell(row=fila_actual, column=5, value="IVA"); celda_lbl_iva.font = font_negrita; celda_lbl_iva.alignment = Alignment(horizontal="right", vertical="center"); celda_lbl_iva.border = borde_delgado
+    celda_val_iva = ws.cell(row=fila_actual, column=6, value=iva); celda_val_iva.font = font_negrita; celda_val_iva.number_format = '$#,##0'; celda_val_iva.alignment = Alignment(horizontal="right", vertical="center"); celda_val_iva.border = borde_delgado
     fila_actual += 1
     ws.cell(row=fila_actual, column=1, value="Condiciones de Venta:").font = font_negrita
-    celda_lbl_tot = ws.cell(row=fila_actual, column=6, value="TOTAL"); celda_lbl_tot.font = font_negrita; celda_lbl_tot.alignment = Alignment(horizontal="right", vertical="center"); celda_lbl_tot.border = borde_delgado
-    celda_val_tot = ws.cell(row=fila_actual, column=7, value=total_bruto); celda_val_tot.font = font_negrita; celda_val_tot.fill = fill_totales; celda_val_tot.number_format = '$#,##0'; celda_val_tot.alignment = Alignment(horizontal="right", vertical="center"); celda_val_tot.border = borde_delgado
+    celda_lbl_tot = ws.cell(row=fila_actual, column=5, value="TOTAL"); celda_lbl_tot.font = font_negrita; celda_lbl_tot.alignment = Alignment(horizontal="right", vertical="center"); celda_lbl_tot.border = borde_delgado
+    celda_val_tot = ws.cell(row=fila_actual, column=6, value=total_bruto); celda_val_tot.font = font_negrita; celda_val_tot.fill = fill_totales; celda_val_tot.number_format = '$#,##0'; celda_val_tot.alignment = Alignment(horizontal="right", vertical="center"); celda_val_tot.border = borde_delgado
     fila_actual += 1
     ws.cell(row=fila_actual, column=1, value="1: Plazo de entrega por confirmar").font = font_normal
     fila_actual += 1
@@ -529,8 +530,7 @@ if input_listo and api_key:
                 dict_equivalencias = leer_equivalencias("equivalencias.csv")
                 
                 response = model.generate_content(contenido_para_gemini)
-                datos_pedido = json.loads(response.text.strip().replace("```json", "").replace("
-```", ""))
+                datos_pedido = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
                 lista_productos = datos_pedido.get("productos", [])
                 cantidades_dict = {item.get("busqueda", ""): int(item.get("cantidad", 1)) for item in lista_productos}
                 candidates_rag = {}
@@ -558,11 +558,11 @@ if input_listo and api_key:
                     df_filtrado = df[df['__tmp_score'] > 0].sort_values(by='__tmp_score', ascending=False).head(40)
                     cand_list = []
                     for _, r in df_filtrado.iterrows():
-                        cand_list.append({"codigo": str(r[col_codigo]), "descripcion": str(r[r[col_desc]]), "precio": float(limpiar_precio(r[col_precio]))})
+                        cand_list.append({"codigo": str(r[col_codigo]), "descripcion": str(r[col_desc]), "precio": float(limpiar_precio(r[col_precio]))})
                     candidates_rag[termino] = cand_list
                 
                 prompt_resolucion = """
-                Actúas como un expert en catalogación. Mapea cada búsqueda con el producto correspondiente del catálogo provisto.
+                Actúas como un experto en catalogación. Mapea cada búsqueda con el producto correspondiente del catálogo provisto.
                 CRÍTICO: Cada producto mapeado debe ser un objeto independiente en la lista final. NO unas múltiples productos en una sola celda o línea usando saltos de línea (\\n).
                 Devuelve JSON con resultados:[{"busqueda_original", "codigo_elegido", "descripcion_elegida", "precio_elegido"}].
                 """
@@ -606,10 +606,10 @@ if input_listo and api_key:
                         
                         response_img = model.generate_content([prompt_proveedor, img_pil])
                         try:
-                            json_data = json.loads(response_img.text.strip().replace("```json", "").replace("
-```", ""))
+                            json_data = json.loads(response_img.text.strip().replace("```json", "").replace("```", ""))
                             items_prov_list = json_data.get("productos", [])
                             
+                            # MOTOR DE RECORTE QUIRÚRGICO DE IMÁGENES
                             for item_p in items_prov_list:
                                 cod_p = str(item_p.get("codigo", "MANUAL")).strip()
                                 c_clean = cod_p.lower().strip()
@@ -721,6 +721,7 @@ if st.session_state['df_resultado'] is not None:
     # Rescate de fotos recortadas desde el almacenamiento temporal
     dict_img = st.session_state.get('dict_imagenes_session', {})
     
+    # LLAMADAS LIMPIAS Y POSICIONALES (Eliminación absoluta de cables sueltos)
     excel_bin = generar_excel_comercial(
         df_editable, nombre_cliente, empresa_cliente, numero_folio,
         total_neto_final_v, iva_calculado_v, total_bruto_v,
