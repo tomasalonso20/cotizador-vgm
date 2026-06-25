@@ -427,7 +427,7 @@ else:
     ⚠️ REGLAS INQUEBRANTABLES DE EXTRACCIÓN:
     1. CÓDIGO / SKU: Identifica el código de fábrica, número de parte o SKU del producto. No inventes caracteres.
     2. MARCA: Identifica la marca del producto (ej. BAHCO, YATO, etc.). Si en la captura aparece el logotipo visual de la marca, interprétalo correctamente.
-    3. DESCRIPCIÓN TÉCNICA: Extrae el nombre del producto y sus especificaciones clave (medidas, capacidad en toneladas, voltajes, etc.) de forma de título ejecutivo y limpio en español.
+    3. DESCRIPCIÓN TÉCNICA: Extrae el nombre del producto and sus especificaciones clave (medidas, capacidad en toneladas, voltajes, etc.) de forma de título ejecutivo y limpio en español.
     4. DETECCIÓN DE COSTO NETO:
        - SI ES UN PANTALLAZO DE PORTAL DE PROVEEDOR: Busca el valor numérico que corresponda a tu costo de adquisición neto (puede figurar como "Precio Distribuidor", "Costo Neto", "Mi Precio", "Precio Mayorista"). Extráelo como un número entero o flotante puro sin puntos ni signos de peso.
        - SI ES UN ENLACE DE FABRICANTE O NO TIENE PRECIO VISIBLE (Caso Catálogos tipo Bahco): No intentes buscar o inventar un valor. Asigna ESTRICTAMENTE el valor 0.0 en el campo de costo.
@@ -500,7 +500,7 @@ if input_listo and api_key:
                         cand_list.append({"codigo": str(r[col_codigo]), "descripcion": str(r[col_desc]), "precio": float(limpiar_precio(r[col_precio]))})
                     candidates_rag[termino] = cand_list
                 
-                prompt_resolucion = "Actúas como un expert. Mapea el catálogo:\n" + json.dumps(candidates_rag, ensure_ascii=False) + "\nDevuelve JSON con resultados:[{busqueda_original, codigo_elegido, descripcion_elegida, precio_elegido}]."
+                prompt_resolucion = "Actúas como un experto. Mapea el catálogo:\n" + json.dumps(candidates_rag, ensure_ascii=False) + "\nDevuelve JSON con resultados:[{busqueda_original, codigo_elegido, descripcion_elegida, precio_elegido}]."
                 response_res = model.generate_content(prompt_resolucion)
                 datos_finales = json.loads(response_res.text.strip().replace("```json", "").replace("```", ""))
                 
@@ -577,23 +577,22 @@ if input_listo and api_key:
         except Exception as e:
             st.error(f"Error en procesamiento comercial: {e}")
 
-# RENDERIZADO INTERACTIVO MAESTRO DESDE MEMORIA (Edición Segura y Confiable)
+# RENDERIZADO INTERACTIVO MAESTRO DESDE MEMORIA (Saneado definitivo)
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Editable en Pantalla)")
     st.caption("💡 Truco Comercial: Si algún producto de un link viene con costo $0, puedes hacer doble clic en la celda 'Precio Lista (Neto)', digitar el valor real, presionar Enter y los cálculos se actualizarán al instante.")
     
-    # LA SOLUCIÓN DEFINITIVA: Desactivamos por completo el parámetro 'disabled' interno de las columnas de configuración.
-    # El bloqueo de escritura se inyecta directamente mediante el argumento global 'disabled=[...]' nativo de la tabla.
-    # Los formatos numéricos usan el estándar D3 de Streamlit ("$,.0f") para evitar mareos de renderizado.
+    # SOLUCIÓN DE SANEAMIENTO: Las columnas con diseño visual (Precio Lista, Precio Final, Total Neto)
+    # se omiten POR COMPLETO de la lista global de 'disabled'. Así no existe ningún cruce de variables.
     df_editable = st.data_editor(
         st.session_state['df_resultado'],
         column_config={
-            "Precio Lista (Neto)": st.column_config.NumberColumn("Costo Base / Lista ($)", format="$,.0f"),
-            "Precio Final (Neto)": st.column_config.NumberColumn("P. Venta Neto ($)", format="$,.0f"),
-            "Total Neto": st.column_config.NumberColumn("Total Neto ($)", format="$,.0f"),
+            "Precio Lista (Neto)": st.column_config.NumberColumn("Costo Base / Lista ($)", format="$%.0f"),
+            "Precio Final (Neto)": st.column_config.NumberColumn("P. Venta Neto ($)", format="$%.0f"),
+            "Total Neto": st.column_config.NumberColumn("Total Neto ($)", format="$%.0f"),
             "Cantidad": st.column_config.NumberColumn("Cant", min_value=1),
         },
-        disabled=["Código", "Marca", "Descripción Catálogo", "Descuento Aplicado", "Precio Final (Neto)", "Total Neto"],
+        disabled=["Código", "Marca", "Descripción Catálogo", "Descuento Aplicado"],
         use_container_width=True
     ).copy()
     
