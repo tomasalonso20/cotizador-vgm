@@ -151,7 +151,7 @@ def clean_pdf_str(text):
         return ""
     return str(text).encode('latin-1', 'replace').decode('latin-1')
 
-# FUNCIÓN: Generación de PDF Comercial Oficial
+# FUNCIÓN: Generación de PDF Comercial Oficial (Con llaves unificadas)
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -234,7 +234,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     pdf.cell(70, 5, clean_pdf_str("VGM SpA"), ln=1, align="R")
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial
+# FUNCIÓN: Generación de Excel Comercial Oficial (Con llaves unificadas)
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -271,7 +271,7 @@ def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, i
     ws["A5"] = "Chopin 2848. San Joaquín. Santiago"; ws["A5"].font = font_normal
     ws["A6"] = f"Sr(a).: {cliente if cliente else 'No especificado'}"; ws["A6"].font = font_negrita
     ws["A7"] = f"Empresa: {empresa if empresa else 'No especificada'}"; ws["A7"].font = font_negrita
-    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra propuesta:"; ws["A8"].font = font_normal
+    ws["A8"] = "En atención a su gentil solicitud de cotización, tenemos el agrado de hacer llegar a usted nuestra proposal:"; ws["A8"].font = font_normal
     
     titulos_columnas = ["CODIGO", "MARCA", "DESCRIPCIÓN", "PRECIO UNITARIO NETO", "CANTIDAD", "PRECIO UNITARIO TOTAL", "IMAGEN REFERENCIAL"]
     fila_tabla_inicio = 10
@@ -352,7 +352,6 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("🔀 Configuración de Precios")
-    # SELECTOR MAESTRO DE MODO COMERCIAL
     modo_operacion = st.selectbox(
         "Modo de Operación / Origen:",
         ["Catálogo Interno (Precio Lista)", "Costo Proveedor + Margen (Pantallazos/Links)"]
@@ -528,7 +527,7 @@ if input_listo and api_key:
                         "Precio_Final": px_final_neto, "Total_Neto": px_final_neto * cant
                     })
 
-            # --- RUTA DE EJECUCIÓN B: COSTO PROVEEDOR + MARGEN ---
+            # --- RUTA DE EJECUCIÓN B: COSTO PROVEEDOR + MARGEN (¡LLAVES UNIFICADAS CORRECTAMENTE!) ---
             else:
                 st.info("🔄 Analizando capturas y extrayendo fichas técnicas web...")
                 items_extraidos = []
@@ -577,12 +576,12 @@ if input_listo and api_key:
         except Exception as e:
             st.error(f"Error en procesamiento comercial: {e}")
 
-# RENDERIZADO INTERACTIVO MAESTRO DESDE MEMORIA (Saneado definitivo)
+# RENDERIZADO INTERACTIVO MAESTRO DESDE MEMORIA (Saneado definitivo y simétrico)
 if st.session_state['df_resultado'] is not None:
     st.markdown("### 📱 Cuadro Comercial Express (Editable en Pantalla)")
     st.caption("💡 Truco Comercial: Si algún producto de un link viene con costo $0, puedes hacer doble clic en la celda 'Costo Base / Lista ($)', digitar el valor real, presionar Enter y los cálculos se actualizarán al instante.")
     
-    # SOLUCIÓN DE SANEAMIENTO: Las columnas internas usan llaves ASCII limpias (sin tildes ni espacios). 
+    # LA SOLUCIÓN DEFINITIVA: Las columnas internas son 100% simétricas tanto para Modo A como Modo B.
     # El bloqueo 'disabled' apunta de forma segura a estas llaves estables. El usuario ve los títulos perfectos.
     df_editable = st.data_editor(
         st.session_state['df_resultado'],
@@ -591,10 +590,10 @@ if st.session_state['df_resultado'] is not None:
             "Marca": st.column_config.TextColumn("Marca"),
             "Descripcion": st.column_config.TextColumn("Descripción Catálogo"),
             "Cantidad": st.column_config.NumberColumn("Cant", min_value=1),
-            "Precio_Lista": st.column_config.NumberColumn("Costo Base / Lista ($)", format="$%.0f"),
+            "Precio_Lista": st.column_config.NumberColumn("Costo Base / Lista ($)", format="$%,.0f"),
             "Descuento": st.column_config.TextColumn("Descuento Aplicado"),
-            "Precio_Final": st.column_config.NumberColumn("P. Venta Neto ($)", format="$%.0f"),
-            "Total_Neto": st.column_config.NumberColumn("Total Neto ($)", format="$%.0f"),
+            "Precio_Final": st.column_config.NumberColumn("P. Venta Neto ($)", format="$%,.0f"),
+            "Total_Neto": st.column_config.NumberColumn("Total Neto ($)", format="$%,.0f"),
         },
         disabled=["Codigo", "Marca", "Descripcion", "Descuento", "Precio_Final", "Total_Neto"],
         use_container_width=True
