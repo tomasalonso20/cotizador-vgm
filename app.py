@@ -13,11 +13,11 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.drawing.image import Image as OpenpyxlImage
 from fpdf import FPDF
 
-# Configuración de la página web (Actualizado a tu marca personal)
+# Configuración de la página web (Tu marca de software personal)
 st.set_page_config(page_title="Cotizador IA EHP", layout="wide")
 
 # AUTODETECCIÓN MAESTRA DEL LOGO CORPORATIVO EN EL SERVIDOR
-# Se mantiene la lectura en memoria EXCLUSIVAMENTE para inyectarlo en el PDF y Excel
+# Se conserva la lectura en memoria EXCLUSIVAMENTE para inyectarlo en el PDF y Excel finales
 logo_bytes = None
 for ext in ["png", "jpg", "jpeg"]:
     if os.path.exists(f"logo.{ext}"):
@@ -25,7 +25,7 @@ for ext in ["png", "jpg", "jpeg"]:
             logo_bytes = f.read()
         break
 
-# TÍTULO PRINCIPAL DE LA WEB (Logo web removido por completo y renombrado a tu marca)
+# TÍTULO PRINCIPAL DE LA INTERFAZ WEB
 st.title("Cotizador IA EHP 🔧")
 
 # Inicializar estados de memoria para evitar que se borren los datos al hacer clic en descargas
@@ -112,12 +112,39 @@ def leer_csv_tolerante(ruta_archivo):
                 continue
     return None
 
+# NUEVA FUNCIÓN CAPA 1: Carga y normaliza el diccionario dinámico de equivalencias de Enrique
+def leer_equivalencias(ruta_archivo="equivalencias.csv"):
+    if not os.path.exists(ruta_archivo):
+        return {}
+    encodings = ['utf-8', 'latin1', 'iso-8859-1', 'utf-8-sig', 'cp1252']
+    delimitadores = [';', ',']
+    for enc in encodings:
+        for sep in delimitadores:
+            try:
+                df_eq = pd.read_csv(ruta_archivo, sep=sep, encoding=enc)
+                df_eq.columns = [str(c).strip().lower() for c in df_eq.columns]
+                
+                # Detectar columnas de forma inteligente
+                col_term = next((c for c in df_eq.columns if 'term' in c or 'clien' in c or 'busq' in c), df_eq.columns[0])
+                col_cod = next((c for c in df_eq.columns if 'cod' in c or 'cat' in c), df_eq.columns[1] if len(df_eq.columns) > 1 else df_eq.columns[0])
+                
+                dict_eq = {}
+                for _, r in df_eq.iterrows():
+                    key_cliente = normalizar_texto(r[col_term])
+                    val_codigo = str(r[col_cod]).strip()
+                    if key_cliente and val_codigo:
+                        dict_eq[key_cliente] = val_codigo
+                return dict_eq
+            except:
+                continue
+    return {}
+
 def clean_pdf_str(text):
     if pd.isna(text):
         return ""
     return str(text).encode('latin-1', 'replace').decode('latin-1')
 
-# FUNCIÓN: Generación de PDF Comercial Oficial (Conserva el membrete de la empresa para el cliente)
+# FUNCIÓN: Generación de PDF Comercial Oficial
 def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
@@ -223,7 +250,7 @@ def generar_pdf_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva
     
     return pdf.output()
 
-# FUNCIÓN: Generación de Excel Comercial Oficial (Conserva el membrete corporativo)
+# FUNCIÓN: Generación de Excel Comercial Oficial
 def generar_excel_comercial(df_cotiz, cliente, empresa, nro_cotiz, total_neto, iva, total_bruto, logo_bytes=None, dict_imagenes=None, condicion_pago="CONTADO", vendedor="Enrique Hernández P."):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -443,23 +470,14 @@ if df_catalogo is None:
 input_listo = False
 contenido_para_gemini = []
 
+# MODIFICACIÓN ENRIQUE: Prompt de extracción ultra liviano enfocado en estructura pura de datos
 prompt_extraccion = """
-Analiza detalladamente esta solicitud de pedido (puede ser imagen, texto o PDF). Extrae cada producto solicitado y su cantidad precisa. Genera de 4 a 6 sinónimos o términos técnicos.
-
-⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
-1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
-2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
-3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
-4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
-5. PUNTA CORONA / LLAVES COMBINADAS: Deben ser estrictamente de la familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Queda terminantemente prohibido elegir llaves con chicharra a menos que se solicite explícitamente de forma textual. Dar obligatoriamente como primera opción la marca 'YATO', y como segunda opción 'ANDES-SAM'.
-6. DADOS TORX DE CUADRANTE 1/2: Filtrar y priorizar exclusivamente los códigos de dados Torx con encastre o cuadrante de 1/2" del catálogo.
-7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos clave: YT1041, YT1039 u homólogos de impacto).
-8. DADOS TORX SUELTOS / INDIVIDUALES (Ej: Torx 30, Torx 27 o textos independientes tipo 'Dado torx 30 -27'): Si el cliente pide dados Torx sueltos o individuales, se deben seleccionar obligatoriamente los códigos de dados individuales correspondientes del catálogo (NUNCA juegos completos), respetando las medidas indicadas por el cliente.
+Analiza detalladamente esta solicitud de pedido (puede ser imagen, texto o PDF). Extrae cada producto solicitado y su cantidad precisa. Genera de 4 a 6 sinónimos o términos técnicos para ampliar la búsqueda.
 
 Devuelve ÚNICAMENTE un JSON puro con esta estructura, sin bloques markdown:
 {
     "productos": [
-        {"busqueda": "Nombre original", "cantidad": 1, "sinonimos": ["t1", "t2"]}
+        {"busqueda": "Nombre original o término identificado", "cantidad": 1, "sinonimos": ["t1", "t2"]}
     ]
 }
 """
@@ -500,6 +518,9 @@ if input_listo and api_key:
             df['__desc_clean'] = df[col_desc].apply(normalizar_texto)
             df['__cod_clean'] = df[col_codigo].apply(normalizar_texto)
             
+            # Carga el archivo de equivalencias dinámico si existe
+            dict_equivalencias = leer_equivalencias("equivalencias.csv")
+            
             response = model.generate_content(contenido_para_gemini)
             datos_pedido = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
             lista_productos = datos_pedido.get("productos", [])
@@ -511,6 +532,31 @@ if input_listo and api_key:
                 termino = item.get("busqueda", "")
                 if not termino: continue
                 
+                norm_termino = normalizar_texto(termino)
+                
+                # INTERCEPCIÓN DINÁMICA (CAPA 1): Verifica si hay match forzado en equivalencias.csv
+                codigo_forzado = None
+                if norm_termino in dict_equivalencias:
+                    codigo_forzado = dict_equivalencias[norm_termino]
+                else:
+                    # Búsqueda parcial de contención para nombres redundantes del cliente
+                    for k_eq, v_eq in dict_equivalencias.items():
+                        if k_eq in norm_termino or norm_termino in k_eq:
+                            codigo_forzado = v_eq
+                            break
+                
+                # Si hay coincidencia forzada por Enrique en el Excel, se amarra directo sin RAG general
+                if codigo_forzado:
+                    match_rows = df[df['__cod_clean'] == normalizar_texto(codigo_forzado)]
+                    if not match_rows.empty:
+                        candidates_rag[termino] = [{
+                            "codigo": str(match_rows.iloc[0][col_codigo]),
+                            "descripcion": str(match_rows.iloc[0][col_desc]),
+                            "precio": float(limpiar_precio(match_rows.iloc[0][col_precio]))
+                        }]
+                        continue
+                
+                # CAPA 2: Si no está en equivalencias, opera la Inteligencia Algorítmica tradicional
                 palabras_flat = set()
                 for t in [termino] + item.get("sinonimos", []):
                     for p in limpiar_plurales(normalizar_texto(t)).split():
@@ -534,20 +580,12 @@ if input_listo and api_key:
                     })
                 candidates_rag[termino] = cand_list
 
+            # MODIFICACIÓN ENRIQUE: Prompt de resolución 100% libre de lógica dura hardcodeada
             prompt_resolucion = """
-            Actúas como un experto en repuestos y herramientas industriales para la empresa VGM SpA.
-            Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo Excel.
+            Actúas como un experto en repuestos y herramientas industriales.
+            Tu objetivo es emparejar los requerimientos del cliente con la mejor opción de nuestro catálogo en base a los candidatos pre-filtrados proporcionados.
             
-            ⚠️ REGLAS INQUEBRANTABLES DE ASIGNACIÓN COMERCIAL:
-            1. PISTOLAS NEUMÁTICAS: Código estándar es 'YT09511'. NO elijas pistolas para inflar neumáticos (YT2370).
-            2. LINTERNAS LARGAS / IMANTADAS: Código predilecto es 'YT08518'.
-            3. LINTERNAS/LÁMPARAS DE CABEZA (FRONTALES): El código exacto asignado es 'L-HEAD-1'. Queda prohibido elegir la imantada YT08518.
-            4. LLAVES DE IMPACTO INALÁMBRICAS: Priorizar 1ra Opción: 'YT8277935'. 2da Opción: 'YT8277925'.
-            5. PUNTA CORONA / LLAVES COMBINADAS: Deben ser estrictamente de la familia tradicional ESTÁNDAR (SIN chicharra / sin ratchet). Queda terminantemente prohibido elegir llaves con chicharra a menos que se solicite explícitamente de forma textual. Dar obligatoriamente como primera opción la marca 'YATO', y como segunda opción 'ANDES-SAM'.
-            6. DADOS TORX DE CUADRANTE 1/2: Filtrar y priorizar exclusivamente los códigos de dados Torx con encastre o cuadrante de 1/2" del catálogo.
-            7. DADOS DE IMPACTO: Buscar y priorizar dados de impacto pesado (ejemplos clave: YT1041, YT1039 u homólogos de impacto).
-            8. DADOS TORX SUELTOS / INDIVIDUALES (Ej: Torx 30, Torx 27 o textos independientes tipo 'Dado torx 30 -27'): Si el cliente pide dados Torx sueltos o individuales, se deben seleccionar obligatoriamente los códigos de dados individuales correspondientes del catálogo (NUNCA juegos completos), respetando las medidas indicadas por el cliente.
-            9. FILTRO ESTRICTO NO ENCONTRADO: Si no calza nada lógico, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
+            ⚠️ REGLA DE CIERRE: Si no calza nada lógico o la lista de candidatos está vacía, marca 'codigo_elegido': 'MANUAL', 'descripcion_elegida': '❌ NO ENCONTRADO', 'precio_elegido': 0.0.
             
             Analiza el siguiente diccionario de búsquedas y candidatos filtrados:
             """ + json.dumps(candidates_rag, ensure_ascii=False, indent=2) + """
@@ -585,7 +623,6 @@ if input_listo and api_key:
                         px_lista = float(limpiar_precio(match_rows.iloc[0][col_precio]))
                         if col_marca: marca = str(match_rows.iloc[0][col_marca]).upper()
                 
-                # JERARQUÍA COMERCIAL SIMPLIFICADA Y ULTRA-VELOZ
                 precio_manual_val = limpiar_precio(precio_manual_input)
                 if precio_manual_val > 0:
                     px_final_neto = precio_manual_val
@@ -609,7 +646,7 @@ if input_listo and api_key:
                 st.session_state['empresa_cliente_s'] = empresa_cliente
                 st.session_state['numero_folio_s'] = numero_folio
                 st.session_state['condicion_pago_s'] = condicion_pago_input
-                st.session_state['vendedor_s'] = vendedor_input
+                st.session_state['vendedor_s'] = seller = vendedor_input
                 st.session_state['subtotal_lista'] = sum(x["Precio Lista (Neto)"] * x["Cantidad"] for x in cotizacion_final)
                 st.session_state['total_neto_final'] = sum(x["Total Neto"] for x in cotizacion_final)
                 st.session_state['descuento_total_pesos'] = max(st.session_state['subtotal_lista'] - st.session_state['total_neto_final'], 0.0)
